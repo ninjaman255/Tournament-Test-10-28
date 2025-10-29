@@ -243,56 +243,60 @@ function TournamentUtils.calculate_round_positions(tournament, round_number)
             end
         end
         
-    elseif round_number == 2 then
-        -- FIXED: Round 2 - Only move winners to round2 positions, leave losers in their round1 positions
-        local current_matches = tournament.matches or {}
-        local round1_results = tournament.round_results[1] or {}
-        
-        -- First, ensure round1 losers are in initial positions
-        for _, result in ipairs(round1_results) do
-            if result.loser then
-                local loser_index = TournamentUtils.find_participant_index(tournament, result.loser.player_id)
-                if loser_index and mug_pos.initial[loser_index] then
-                    positions[loser_index] = mug_pos.initial[loser_index]
-                    print(string.format("[tourney] Round 2: Round 1 loser %s in initial position", result.loser.player_id))
-                end
+  
+elseif round_number == 2 then
+    -- FIXED: Round 2 - Only move winners to round2 positions, leave losers in round1 positions
+    local round2_results = tournament.round_results[2] or {}
+    local round1_results = tournament.round_results[1] or {}
+    
+    -- First, ensure ALL round1 losers are in initial positions
+    for _, result in ipairs(round1_results) do
+        if result.loser then
+            local loser_index = TournamentUtils.find_participant_index(tournament, result.loser.player_id)
+            if loser_index and mug_pos.initial[loser_index] then
+                positions[loser_index] = mug_pos.initial[loser_index]
+                print(string.format("[tourney] Round 2: Round 1 loser %s in initial position", result.loser.player_id))
             end
         end
-        
-        -- Place ALL round1 winners in their round1 positions initially
-        for _, result in ipairs(round1_results) do
-            if result.winner then
-                local winner_index = TournamentUtils.find_participant_index(tournament, result.winner.player_id)
-                local match_index = result.match
-                
-                if winner_index and mug_pos.round1_winners[match_index] then
-                    positions[winner_index] = mug_pos.round1_winners[match_index]
-                    print(string.format("[tourney] Round 2: Round 1 winner %s in round1 position (%d,%d)", 
-                          result.winner.player_id, positions[winner_index].x, positions[winner_index].y))
-                end
+    end
+    
+    -- Place ALL round1 winners in round1 positions initially
+    for _, result in ipairs(round1_results) do
+        if result.winner then
+            local winner_index = TournamentUtils.find_participant_index(tournament, result.winner.player_id)
+            local match_index = result.match
+            
+            if winner_index and mug_pos.round1_winners[match_index] then
+                positions[winner_index] = mug_pos.round1_winners[match_index]
+                print(string.format("[tourney] Round 2: Round 1 winner %s in round1 position (%d,%d)", 
+                      result.winner.player_id, positions[winner_index].x, positions[winner_index].y))
             end
         end
+    end
+    
+    -- FIXED: Process BOTH Round 2 matches properly
+    print(string.format("[tourney] Processing %d Round 2 results", #round2_results))
+    for _, result in ipairs(round2_results) do
+        local winner_index = TournamentUtils.find_participant_index(tournament, result.winner.player_id)
+        local loser_index = TournamentUtils.find_participant_index(tournament, result.loser.player_id)
+        local match_index = result.match
         
-        -- Now update for round 2 results - ONLY move winners to round2 positions
-        for match_index, match in ipairs(current_matches) do
-            if match.completed then
-                local winner_index = TournamentUtils.find_participant_index(tournament, match.winner.player_id)
-                local loser_index = TournamentUtils.find_participant_index(tournament, match.loser.player_id)
-                
-                -- Round 2 winners move to round2 positions
-                if winner_index and mug_pos.round2_winners[match_index] then
-                    positions[winner_index] = mug_pos.round2_winners[match_index]
-                    print(string.format("[tourney] Round 2: Moved winner %s to round2 position (%d,%d)", 
-                          match.winner.player_id, positions[winner_index].x, positions[winner_index].y))
-                end
-                
-                -- Round 2 losers STAY in their round1 positions (already set above)
-                if loser_index then
-                    print(string.format("[tourney] Round 2: Loser %s remains in round1 position (%d,%d)", 
-                          match.loser.player_id, positions[loser_index].x, positions[loser_index].y))
-                end
-            end
+        -- FIXED: Only move the winner to round2 position
+        if winner_index and mug_pos.round2_winners[match_index] then
+            positions[winner_index] = mug_pos.round2_winners[match_index]
+            print(string.format("[tourney] Round 2: Moved winner %s to round2 position (%d,%d) for match %d", 
+                  result.winner.player_id, positions[winner_index].x, positions[winner_index].y, match_index))
+        else
+            print(string.format("[tourney] Round 2: Could not move winner %s - index: %s, position: %s", 
+                  result.winner.player_id, tostring(winner_index), tostring(mug_pos.round2_winners[match_index])))
         end
+        
+        -- FIXED: Loser stays in their round1 position (no change)
+        if loser_index then
+            print(string.format("[tourney] Round 2: Loser %s remains in round1 position (%d,%d)", 
+                  result.loser.player_id, positions[loser_index].x, positions[loser_index].y))
+        end
+    end
         
     elseif round_number == 3 then
         -- Round 3: Move champion to top position, runner-up stays in round2 position, others remain where they are

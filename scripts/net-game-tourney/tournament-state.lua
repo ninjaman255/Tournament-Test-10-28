@@ -322,7 +322,6 @@ function TournamentState.get_current_state_positions(tournament_id)
     return tournament.current_state_positions
 end
 
--- Function to store NPC predetermined results for a specific tournament
 function TournamentState.store_npc_predetermined_result(tournament_id, match_index, result_data)
     local tournament = active_tournaments[tournament_id]
     if not tournament then return false end
@@ -332,6 +331,8 @@ function TournamentState.store_npc_predetermined_result(tournament_id, match_ind
     end
     
     tournament.npc_predetermined_results[match_index] = result_data
+    print(string.format("[TournamentState] Stored NPC predetermined result for tournament %d, match %d, round %d: %s defeated %s", 
+          tournament_id, match_index, result_data.round or 0, result_data.winner_id, result_data.loser_id))
     return true
 end
 
@@ -342,10 +343,14 @@ function TournamentState.get_npc_predetermined_result(tournament_id, match_index
         return nil
     end
     
-    return tournament.npc_predetermined_results[match_index]
+    local result = tournament.npc_predetermined_results[match_index]
+    if result then
+        print(string.format("[TournamentState] Retrieved NPC predetermined result for tournament %d, match %d: %s defeated %s", 
+              tournament_id, match_index, result.winner_id, result.loser_id))
+    end
+    
+    return result
 end
-
--- NEW: Enhanced participant state management functions
 
 -- Initialize participant states at tournament start
 function TournamentState.initialize_participant_states(tournament_id)
@@ -518,5 +523,37 @@ end
 function TournamentState.get_tournament_id_by_player(player_id)
     return player_tournaments[player_id]
 end
+
+function TournamentState.debug_tournament_state(tournament_id)
+    local tournament = active_tournaments[tournament_id]
+    if not tournament then
+        print("[TournamentState] Tournament " .. tournament_id .. " not found")
+        return
+    end
+    
+    print(string.format("[TournamentState] Debug Tournament %d:", tournament_id))
+    print("  Status: " .. tournament.status)
+    print("  Current Round: " .. tournament.current_round)
+    print("  Participants: " .. #tournament.participants)
+    print("  Winners: " .. #tournament.winners)
+    
+    for round_num = 1, 3 do
+        local round_results = tournament.round_results[round_num] or {}
+        print(string.format("  Round %d Results: %d", round_num, #round_results))
+        
+        for i, result in ipairs(round_results) do
+            print(string.format("    Result %d: %s defeated %s (match %d)", 
+                  i, result.winner.player_id, result.loser.player_id, result.match))
+        end
+    end
+    
+    print("  Current Matches: " .. #tournament.matches)
+    for i, match in ipairs(tournament.matches) do
+        print(string.format("    Match %d: %s vs %s - completed: %s", 
+              i, match.player1.player_id, match.player2.player_id, tostring(match.completed)))
+    end
+end
+
+
 
 return TournamentState
