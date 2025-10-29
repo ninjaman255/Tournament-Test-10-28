@@ -1,5 +1,6 @@
 local TournamentUtils = {}
 local games = require("scripts/net-games/framework")
+local TournamentState = require("scripts/net-game-tourney/tournament-state")
 
 -- Freeze all human players in a tournament
 function TournamentUtils.freeze_all_tournament_players(tournament_id, TournamentState)
@@ -267,6 +268,7 @@ function TournamentUtils.calculate_round_positions(tournament, round_number)
         
         -- Start with all participants in their current positions (from round 2)
         -- First get the current state positions
+        
         local current_positions = TournamentState.get_current_state_positions(tournament.tournament_id) or {}
         
         -- If no current positions, build from round results
