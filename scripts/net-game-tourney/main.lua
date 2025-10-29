@@ -440,7 +440,7 @@ local function show_tournament_stage(player_id, tournament, stage_type, is_curre
     end)
 end
 
--- FIXED: Enhanced battle starter with consistent participant shuffling
+-- FIXED: Enhanced battle starter with consistent participant shuffling and isolated tournament state
 local function start_battle(player1_id, player2_id, tournament_id, match_index)
     return async(function()
         local is_player1_npc = string.find(player1_id, ".zip")
@@ -459,18 +459,15 @@ local function start_battle(player1_id, player2_id, tournament_id, match_index)
             table.insert(players_to_cleanup, player2_id)
         end
         
-        await(Async.sleep(0.3)) -- Brief pause to ensure cleanup
-        
         if is_player1_npc and is_player2_npc then
             -- NPC vs NPC - instant resolution with weighted random
-            print("[tourney] Starting instant NPC vs NPC battle")
+            print("[tourney] Starting instant NPC vs NPC battle for tournament " .. tournament_id)
             
             -- Get tournament to store consistent results
             local tournament = TournamentState.get_tournament(tournament_id)
             
-            -- Check if we already have a predetermined result for this match
-            local predetermined_key = "npc_result_" .. match_index
-            local predetermined_result = tournament[predetermined_key]
+            -- FIXED: Use tournament-specific storage for NPC results
+            local predetermined_result = TournamentState.get_npc_predetermined_result(tournament_id, match_index)
             
             local winner_id, loser_id
             
@@ -478,7 +475,7 @@ local function start_battle(player1_id, player2_id, tournament_id, match_index)
                 -- Use predetermined result for consistency across all players
                 winner_id = predetermined_result.winner_id
                 loser_id = predetermined_result.loser_id
-                print("[tourney] Using predetermined NPC result: " .. winner_id .. " defeated " .. loser_id)
+                print("[tourney] Using predetermined NPC result for tournament " .. tournament_id .. ": " .. winner_id .. " defeated " .. loser_id)
             else
                 -- Determine result with weighted random and store it for consistency
                 local npc1_weight = get_npc_weight(player1_id)
@@ -494,14 +491,14 @@ local function start_battle(player1_id, player2_id, tournament_id, match_index)
                     loser_id = player1_id
                 end
                 
-                -- Store the result for consistency across all players
-                tournament[predetermined_key] = {
+                -- FIXED: Store the result in tournament-specific storage
+                TournamentState.store_npc_predetermined_result(tournament_id, match_index, {
                     winner_id = winner_id,
                     loser_id = loser_id,
                     weights = {npc1_weight, npc2_weight}
-                }
+                })
                 
-                print("[tourney] NPC battle result: " .. winner_id .. " defeated " .. loser_id .. " (weights: " .. npc1_weight .. " vs " .. npc2_weight .. ")")
+                print("[tourney] NPC battle result for tournament " .. tournament_id .. ": " .. winner_id .. " defeated " .. loser_id .. " (weights: " .. npc1_weight .. " vs " .. npc2_weight .. ")")
             end
             
             -- Get tournament and match info to record the result
@@ -881,19 +878,35 @@ end
 -- UI and Board Management Functions
 ---------------------------------------------------------------------
 
--- FIXED: Modified to shuffle participants once for consistency across all players and NPCs
+-- FIXED: Modified to shuffle participants once for consistency across all players and NPCs with proper isolation
 local function initialize_tournament_participants(participants, backfill, tournament_type)
     local final = {}
     
     -- Always preserve the original human player order for consistency
+    -- FIXED: Create deep copies to avoid shared references
     for _, p in next, participants do 
-        table.insert(final, p) 
+        local participant_copy = {
+            player_id = p.player_id,
+            player_mugshot = {
+                mug_texture = p.player_mugshot.mug_texture,
+                mug_animation = p.player_mugshot.mug_animation
+            }
+        }
+        table.insert(final, participant_copy)
     end
     
     if backfill and #final < 8 then
         local fill = TableUtils.SelectRandomItemsFromTableClamped(npc_paths, 8 - #final)
         for _, f in next, fill do 
-            table.insert(final, f) 
+            -- FIXED: Create deep copies of NPC data to avoid shared references
+            local npc_copy = {
+                player_id = f.player_id,
+                player_mugshot = {
+                    mug_texture = f.player_mugshot.mug_texture,
+                    mug_animation = f.player_mugshot.mug_animation
+                }
+            }
+            table.insert(final, npc_copy)
         end
     end
     

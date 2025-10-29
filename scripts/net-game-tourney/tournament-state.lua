@@ -20,7 +20,9 @@ function TournamentState.create_tournament(board_id, area_id, host_player_id)
         -- ADD: Enhanced position tracking for display
         participant_positions = {}, -- Track current position for each participant
         round_positions = { {}, {}, {} }, -- Store positions after each round
-        current_state_positions = {} -- Track the current display state
+        current_state_positions = {}, -- Track the current display state
+        -- FIXED: Add NPC predetermined results storage specific to this tournament
+        npc_predetermined_results = {} -- Store NPC battle results per match for this tournament only
     }
     
     active_tournaments[tournament_id] = tournament
@@ -33,13 +35,14 @@ function TournamentState.add_participant(tournament_id, participant)
         return false
     end
     
-    -- Check if player is already in a tournament
-    if participant.player_id and player_tournaments[participant.player_id] then
+    -- Check if player is already in a tournament (only for real players, not NPCs)
+    if participant.player_id and not string.find(participant.player_id, ".zip") and player_tournaments[participant.player_id] then
         return false
     end
     
     table.insert(tournament.participants, participant)
-    if participant.player_id then
+    -- Only track real players in player_tournaments, not NPCs
+    if participant.player_id and not string.find(participant.player_id, ".zip") then
         player_tournaments[participant.player_id] = tournament_id
     end
     
@@ -232,9 +235,9 @@ function TournamentState.cleanup_tournament(tournament_id)
     local tournament = active_tournaments[tournament_id]
     if not tournament then return end
     
-    -- Remove players from tracking
+    -- Remove players from tracking (only real players, not NPCs)
     for _, participant in ipairs(tournament.participants) do
-        if participant.player_id then
+        if participant.player_id and not string.find(participant.player_id, ".zip") then
             player_tournaments[participant.player_id] = nil
         end
     end
@@ -242,9 +245,11 @@ function TournamentState.cleanup_tournament(tournament_id)
     active_tournaments[tournament_id] = nil
 end
 
--- NEW: Remove a specific player from tournament tracking
+-- NEW: Remove a specific player from tournament tracking (only real players)
 function TournamentState.remove_player_from_tournament(player_id)
-    player_tournaments[player_id] = nil
+    if not string.find(player_id, ".zip") then
+        player_tournaments[player_id] = nil
+    end
 end
 
 -- ADD: Function to store round positions based on pairings
@@ -279,11 +284,38 @@ function TournamentState.get_current_state_positions(tournament_id)
     return tournament.current_state_positions
 end
 
+-- ADD: Function to store NPC predetermined results for a specific tournament
+function TournamentState.store_npc_predetermined_result(tournament_id, match_index, result_data)
+    local tournament = active_tournaments[tournament_id]
+    if not tournament then return false end
+    
+    if not tournament.npc_predetermined_results then
+        tournament.npc_predetermined_results = {}
+    end
+    
+    tournament.npc_predetermined_results[match_index] = result_data
+    return true
+end
+
+-- ADD: Function to get NPC predetermined results for a specific tournament
+function TournamentState.get_npc_predetermined_result(tournament_id, match_index)
+    local tournament = active_tournaments[tournament_id]
+    if not tournament or not tournament.npc_predetermined_results then
+        return nil
+    end
+    
+    return tournament.npc_predetermined_results[match_index]
+end
+
 function TournamentState.get_tournament(tournament_id)
     return active_tournaments[tournament_id]
 end
 
 function TournamentState.is_player_in_tournament(player_id)
+    -- Only check for real players, NPCs can be in multiple tournaments
+    if string.find(player_id, ".zip") then
+        return false -- NPCs are not restricted to one tournament
+    end
     return player_tournaments[player_id] ~= nil
 end
 
