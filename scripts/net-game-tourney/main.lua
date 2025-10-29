@@ -30,7 +30,7 @@ local grid_pos = ui_data_pos.grid
 local bracket_pos = ui_data_pos.bracket
 local title_banner_pos = ui_data_pos.title_banner
 local champion_topper_pos = ui_data_pos.champion_topper_bn4
-local duration = 10
+local duration = 60
 
 -- NPC weight lookup table
 local NPC_WEIGHTS = {
