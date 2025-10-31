@@ -1562,7 +1562,7 @@ end
 Net:on("on_tick", function(event)
     local timer = 0
     timer = timer + event.delta
-    if event.delta % (60 * 5) == 0 then -- Every 5 minutes
+    if timer % (60 * 5) == 0 then -- Every 5 minutes
         cleanup_stuck_tournaments()
         timer = 0
     end
