@@ -197,6 +197,60 @@ local function cleanup_ui(player_id, player_area, name, song)
     Net.set_song(player_area, song)
 end
 
+-- NEW: Function to clear parties and waiting queues for a tournament
+local function cleanup_tournament_parties(tournament_id)
+    local tournament = TournamentState.get_tournament(tournament_id)
+    if not tournament then return end
+    
+    print("[tourney] Cleaning up parties for tournament " .. tournament_id)
+    
+    -- Clear from all area boards
+    for area_id, boards in pairs(tourney_boards) do
+        for object_id, board_data in pairs(boards) do
+            if board_data.active_tournaments then
+                local before_count = #board_data.active_tournaments
+                board_data.active_tournaments = {}
+                if before_count > 0 then
+                    print(string.format("[tourney] Cleared %d parties from board %s in area %s", 
+                          before_count, object_id, area_id))
+                end
+            end
+        end
+    end
+    
+    -- Clear players from waiting queues
+    local waiting_cleared = 0
+    for player_id, waiting_data in pairs(TourneyEmitters.players_waiting) do
+        if waiting_data and waiting_data.tourney_board then
+            TourneyEmitters.players_waiting[player_id] = nil
+            waiting_cleared = waiting_cleared + 1
+            
+            -- Also cleanup any active countdowns
+            if active_countdowns[player_id] then
+                games.deactivate_framework(player_id)
+                active_countdowns[player_id] = nil
+            end
+        end
+    end
+    
+    if waiting_cleared > 0 then
+        print("[tourney] Cleared " .. waiting_cleared .. " players from waiting queues")
+    end
+end
+
+-- NEW: Function to clear specific board parties
+local function clear_board_parties(area_id, object_id)
+    if tourney_boards[area_id] and tourney_boards[area_id][object_id] then
+        local before_count = #tourney_boards[area_id][object_id].active_tournaments
+        tourney_boards[area_id][object_id].active_tournaments = {}
+        
+        if before_count > 0 then
+            print(string.format("[tourney] Cleared %d parties from board %s in area %s", 
+                  before_count, object_id, area_id))
+        end
+    end
+end
+
 -- FIXED: Enhanced function for seamless board transitions with consistent participant shuffling
 local function show_tournament_results_with_animation(player_id, tournament, round_number)
     return async(function()
@@ -978,15 +1032,12 @@ local function run_tournament_battles(tournament_id)
                         TournamentState.remove_player_from_tournament(participant.player_id)
                     end
                 end
-                
-                TournamentState.cleanup_tournament(tournament_id)
-                print("[tourney] Tournament " .. tournament_id .. " completed with NPC winner")
-                return
-            else
-                -- Tournament not completed yet, continue with NPCs
-                print("[tourney] Continuing tournament with NPCs only for round " .. tournament.current_round)
-                -- The tournament will continue normally, just without real players
-            end
+                 cleanup_tournament_parties(tournament_id)
+    
+    TournamentState.cleanup_tournament(tournament_id)
+    print("[tourney] Tournament " .. tournament_id .. " completed with NPC winner")
+    return
+end
         end
 
         -- Check if tournament is completed (after 3 rounds)
@@ -1029,11 +1080,14 @@ local function run_tournament_battles(tournament_id)
             
             print("[tourney] Cleaned up " .. #players_cleaned_up .. " players: " .. table.concat(players_cleaned_up, ", "))
             
-            -- NEW: Force cleanup of the tournament regardless of NPC win
-            TournamentState.cleanup_tournament(tournament_id)
-            print("[tourney] Tournament " .. tournament_id .. " completely removed after completion (NPC winner)")
-            return
-        end
+   -- NEW: Clean up parties and waiting queues
+    cleanup_tournament_parties(tournament_id)
+    
+    -- NEW: Force cleanup of the tournament regardless of NPC win
+    TournamentState.cleanup_tournament(tournament_id)
+    print("[tourney] Tournament " .. tournament_id .. " completely removed after completion (NPC winner)")
+    return
+    end
 
         -- Ask host if they want to start next round
         local start_next_round = await(TournamentUtils.ask_host_about_next_round(tournament_id, TournamentState))
@@ -1119,21 +1173,24 @@ local function run_tournament_battles(tournament_id)
                 end
             end
         else
-            -- Host chose not to continue, end tournament
-            print("[tourney] Host chose to end tournament after round " .. tournament.current_round)
-            
-            -- Clean up all players
-            for _, participant in ipairs(tournament.participants) do
-                if not string.find(participant.player_id, ".zip") then
-                    games.deactivate_framework(participant.player_id)
-                    -- Remove player from tournament tracking
-                    TournamentState.remove_player_from_tournament(participant.player_id)
-                end
-            end
-            
-            TournamentState.cleanup_tournament(tournament_id)
+    -- Host chose not to continue, end tournament
+    print("[tourney] Host chose to end tournament after round " .. tournament.current_round)
+    
+    -- Clean up all players
+    for _, participant in ipairs(tournament.participants) do
+        if not string.find(participant.player_id, ".zip") then
+            games.deactivate_framework(participant.player_id)
+            -- Remove player from tournament tracking
+            TournamentState.remove_player_from_tournament(participant.player_id)
         end
-    end)
+    end
+    
+    -- NEW: Clean up parties
+    cleanup_tournament_parties(tournament_id)
+    
+    TournamentState.cleanup_tournament(tournament_id)
+    end
+end)
 end
 
 ---------------------------------------------------------------------
@@ -1531,6 +1588,43 @@ TourneyEmitters.tourney_emitter:on("battle_completed", function(event)
     end)
 end)
 
+
+-- NEW: Function to cleanup orphaned parties (parties that don't have active tournaments)
+local function cleanup_orphaned_parties()
+    local parties_cleared = 0
+    local waiting_cleared = 0
+    
+    -- Clear all board parties (they should be recreated as needed)
+    for area_id, boards in pairs(tourney_boards) do
+        for object_id, board_data in pairs(boards) do
+            if board_data.active_tournaments and #board_data.active_tournaments > 0 then
+                local had_parties = #board_data.active_tournaments
+                board_data.active_tournaments = {}
+                parties_cleared = parties_cleared + had_parties
+            end
+        end
+    end
+    
+    -- Clear waiting players
+    for player_id, waiting_data in pairs(TourneyEmitters.players_waiting) do
+        if waiting_data then
+            TourneyEmitters.players_waiting[player_id] = nil
+            waiting_cleared = waiting_cleared + 1
+            
+            -- Cleanup any active countdowns
+            if active_countdowns[player_id] then
+                games.deactivate_framework(player_id)
+                active_countdowns[player_id] = nil
+            end
+        end
+    end
+    
+    if parties_cleared > 0 or waiting_cleared > 0 then
+        print(string.format("[tourney] Cleanup: Cleared %d orphaned parties and %d waiting players", 
+              parties_cleared, waiting_cleared))
+    end
+end
+
 -- NEW: Function to periodically check for and clean up stuck tournaments
 local function cleanup_stuck_tournaments()
     print("[tourney] Running stuck tournament cleanup check...")
@@ -1548,10 +1642,16 @@ local function cleanup_stuck_tournaments()
                 end
             end
             
+            -- NEW: Clean up parties
+            cleanup_tournament_parties(tournament_id)
+            
             TournamentState.cleanup_tournament(tournament_id)
             tournaments_cleaned = tournaments_cleaned + 1
         end
     end
+    
+    -- NEW: Also cleanup orphaned parties (parties without active tournaments)
+    cleanup_orphaned_parties()
     
     if tournaments_cleaned > 0 then
         print("[tourney] Cleaned up " .. tournaments_cleaned .. " stuck tournaments")
@@ -1609,5 +1709,3 @@ end)
 TourneyEmitters.tournament_ui_emitter:on("ui_animation_changed", function(event)
     print("[Tournament UI] Animation changed for " .. event.element .. ": " .. event.animation)
 end)
-
-print("[tourney] Tournament system initialized and ready")
