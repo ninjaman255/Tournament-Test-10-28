@@ -7,7 +7,7 @@
   <property name="Background Vel Y" value=".1"/>
   <property name="Name" value="Tourney"/>
   <property name="Song" value="/server/assets/demo/space.ogg"/>
-  <property name="Stasis" value="26,21,0"/>
+  <property name="Stasis" value="14,15,0"/>
  </properties>
  <tileset firstgid="1" source="../assets/tiles/Multiplayer.tsx"/>
  <tileset firstgid="53" source="../assets/tourney/ow-tourney-board.tsx"/>
