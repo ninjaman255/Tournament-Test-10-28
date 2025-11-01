@@ -57,8 +57,8 @@ local CONSTANTS = {
     -- Default Champion Topper animation path
     champion_topper_bn4_anim=ui_element_paths.."champion-topper-bn4.anim",
     champion_topper_bn45_anim=ui_element_paths.."champion-topper-bn45.anim",
-    default_mini_mug_texture = "/server/assets/tourney/tourney-board-elements/mini-mug-frame.png",
-    default_mini_mug_anim = "/server/assets/tourney/tourney-board-elements/mini-mug-frame.anim",
+    default_mini_mug_texture = ui_element_paths.."mini-mug-frame.png",
+    default_mini_mug_anim = ui_element_paths.."mini-mug-frame.anim",
     default_bn4_title_banner_anim = ui_element_paths.."title-banners-bn4/title-banner.anim",    
     -- Default Music and SFX.
     default_tourney_announcement_music = "/server/assets/tourney/music/bbn4_tournament_announcement.ogg",
