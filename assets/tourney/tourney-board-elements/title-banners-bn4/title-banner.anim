@@ -1,8 +1,7 @@
-animation state="ACTIVE"
-frame duration="0.0833333" x="22" y="0" w="22" h="26" originx="0" originy="0"
+imagePath="D:/ONB/Teblat Wonterk Server/resources/mods/assets/bg-gradient-citybattle.png"
 
-animation state="INACTIVE"
-frame duration="0.0833333" x="0" y="0" w="22" h="26" originx="0" originy="0"  
+animation state="BG"
+frame duration="0" x="0" y="0" w="240" h="160" originx="0" originy="0" flipx="0" flipy="0"
 
 animation state="IDLE_DR"
 

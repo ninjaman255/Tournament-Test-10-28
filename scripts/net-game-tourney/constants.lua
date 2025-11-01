@@ -1,7 +1,7 @@
 local ui_element_paths = "/server/assets/tourney/tourney-board-elements/"
 
 local CONSTANTS = {
-    bracket_background_path = {
+    bn4_bg_data = {
         blue_bn4 = {
             gradient_texture=ui_element_paths.."blue-bn4/gradient.png",
             grid_texture=ui_element_paths.."blue-bn4/grid.png",
@@ -31,6 +31,12 @@ local CONSTANTS = {
             grid_texture=ui_element_paths.."red-orange-bn4/grid.png",
         },
     },
+    bn4_default_titles = {
+        den_battle = ui_element_paths.."title-banners-bn4/den-battle.png",
+        eagle = ui_element_paths.."title-banners-bn4/eagle.png",
+        free_tournament = ui_element_paths.."title-banners-bn4/free-tourney.png",
+        red_sun = ui_element_paths.."title-banners-bn4/red-sun.png",
+    },
     -- Bracket/Tourney Path paths
     bracket_bm_bn4 = ui_element_paths.."bracket-bm.png",
     bracket_rs_bn4 = ui_element_paths.."bracket-rs.png",
@@ -42,15 +48,20 @@ local CONSTANTS = {
     default_grid_anim_path_bn4 = ui_element_paths.."grid.anim",
     -- Default mugshot animation has all the needed built in empty animation_state(s)
     default_mug_anim = ui_element_paths.."mug.anim",
-    -- Crown Textrue and anim (BN4)
+    -- Default Crown Texture and anim (BN4)
     crown_texture_path = ui_element_paths.."crown.png",
     crown_anim_path = ui_element_paths.."crown.anim",
-    -- Champion Toppers for the top of our Brackets/Tourney Path graphic
+    -- Default Champion Toppers for the top of our Brackets/Tourney Path graphic
     champion_topper_bn4=ui_element_paths.."champion-topper-bn4.png",
     champion_topper_bn45=ui_element_paths.."champion-topper-bn45.png",
     -- Default Champion Topper animation path
     champion_topper_bn4_anim=ui_element_paths.."champion-topper-bn4.anim",
     champion_topper_bn45_anim=ui_element_paths.."champion-topper-bn45.anim",
+    default_mini_mug_texture = "/server/assets/tourney/tourney-board-elements/mini-mug-frame.png",
+    default_mini_mug_anim = "/server/assets/tourney/tourney-board-elements/mini-mug-frame.anim",
+    default_title_banner_anim = ui_element_paths.."title-banners-bn4/title-banner.anim",    
+    -- Default Music and SFX.
+    default_tourney_announcement_music = "/server/assets/tourney/music/bbn4_tournament_announcement.ogg",
 }
 
 return CONSTANTS

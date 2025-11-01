@@ -174,9 +174,9 @@ end
 local function add_participant_mugshot(player_id, mugshot_id, mug_texture_path, x, y, z)
     local z_pos = z or 2  -- Default to 2 if z is not provided
     games.add_ui_element("MUG_FRAME_" .. mugshot_id, player_id,
-        "/server/assets/tourney/mini-mug-frame.png", "/server/assets/tourney/mini-mug-frame.anim", "ACTIVE", x, y, z_pos + 1)  -- Frame above mugshot
+        constants.default_mini_mug_texture, constants.default_mini_mug_anim, "ACTIVE", x, y, z_pos + 1)  -- Frame above mugshot
     games.add_ui_element("MUG_" .. mugshot_id, player_id, mug_texture_path,
-        "/server/assets/tourney/mug.anim", "UI", x, y, z_pos, .50, .50)
+        constants.default_mug_anim, "UI", x, y, z_pos, .50, .50)
 end
 
 -- Enhanced function to remove specific participant mugshot
@@ -424,7 +424,7 @@ local function show_tournament_stage(player_id, tournament, stage_type, is_curre
         local original_map_name = Net.get_area_name(player_area)
         Net.set_area_name(player_area, "            ")
         local original_map_song = Net.get_song(player_area)
-        Net.set_song(player_area, "/server/assets/tourney/music/bbn4_tournament_announcement.ogg")
+        Net.set_song(player_area, constants.default_tourney_announcement_music)
 
         games.activate_framework(player_id)
         games.freeze_player(player_id)
