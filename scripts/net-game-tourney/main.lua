@@ -194,12 +194,12 @@ local function setup_board_bg_elements(player_id, info)
         constants.default_bracket_anim_path_bn4, "UI", bracket_pos.x, bracket_pos.y, bracket_pos.z)
     games.add_ui_element("CHAMPION TOPPER", player_id, constants.champion_topper_bn4,
         constants.champion_topper_bn4_anim, "UI", champion_topper_pos.x, champion_topper_pos.y, champion_topper_pos.z)
-    games.add_ui_element("TITLE BANNER", player_id, "/server/assets/tourney/title-banner.png",
-        "/server/assets/tourney/title-banner.anim", "RED", title_banner_pos.x, title_banner_pos.y, title_banner_pos.z)
-    games.add_ui_element("CROWN_1", player_id, "/server/assets/tourney/crown.png",
-        "/server/assets/tourney/crown.anim", "IDLE", crown1_pos.x, crown1_pos.y, crown1_pos.z)
-    games.add_ui_element("CROWN_2", player_id, "/server/assets/tourney/crown.png",
-        "/server/assets/tourney/crown.anim", "IDLE", crown2_pos.x, crown2_pos.y, crown2_pos.z)
+    games.add_ui_element("TITLE BANNER", player_id, constants.bn4_default_titles.free_tournament,
+        constants.default_bn4_title_banner_anim, "UI", title_banner_pos.x, title_banner_pos.y, title_banner_pos.z)
+    games.add_ui_element("CROWN_1", player_id, constants.crown_texture_path,
+        constants.crown_anim_path, "INACTIVE", crown1_pos.x, crown1_pos.y, crown1_pos.z)
+    games.add_ui_element("CROWN_2", player_id, constants.crown_texture_path,
+        constants.crown_anim_path, "INACTIVE", crown2_pos.x, crown2_pos.y, crown2_pos.z)
 end
 
 local function cleanup_ui(player_id, player_area, name, song)
@@ -269,12 +269,12 @@ local function show_tournament_results_with_animation(player_id, tournament, rou
             print("[tourney] No board data stored for tournament")
             return
         end
-        
+        Net.toggle_player_hud(player_id)
         local player_area = Net.get_player_area(player_id)
         local original_map_name = Net.get_area_name(player_area)
         Net.set_area_name(player_area, "            ")
         local original_map_song = Net.get_song(player_area)
-        Net.set_song(player_area, "/server/assets/tourney/music/bbn4_tournament_announcement.ogg")
+        Net.set_song(player_area, constants.default_tourney_announcement_music)
 
         games.activate_framework(player_id)
         games.freeze_player(player_id)
@@ -408,6 +408,7 @@ local function show_tournament_results_with_animation(player_id, tournament, rou
         Net.fade_player_camera(player_id, { r = 0, g = 0, b = 0, a = 0 }, 0.3)
         Net.unlock_player_input(player_id)
         games.deactivate_framework(player_id)
+        Net.toggle_player_hud(player_id)
         return true
     end)
 end
@@ -419,7 +420,7 @@ local function show_tournament_stage(player_id, tournament, stage_type, is_curre
             print("[tourney] No board data stored for tournament")
             return
         end
-        
+        Net.toggle_player_hud(player_id)
         local player_area = Net.get_player_area(player_id)
         local original_map_name = Net.get_area_name(player_area)
         Net.set_area_name(player_area, "            ")
@@ -505,6 +506,7 @@ local function show_tournament_stage(player_id, tournament, stage_type, is_curre
         Net.fade_player_camera(player_id, { r = 0, g = 0, b = 0, a = 0 }, 0.3)
         Net.unlock_player_input(player_id)
         games.deactivate_framework(player_id)
+        Net.toggle_player_hud(player_id)
     end)
 end
 
@@ -893,7 +895,7 @@ local function run_tournament_battles(tournament_id)
         if tournament.current_round == 1 then
             print("[tourney] Showing initial tournament board to all players")
             show_board_to_all_players(tournament, show_tournament_stage, "initial", false)
-            await(Async.sleep(2.0)) -- Additional pause after all boards are shown
+            await(Async.sleep(8.0)) -- Additional pause after all boards are shown
         else
             -- For subsequent rounds, show the CURRENT STATE (positions from previous round)
             print("[tourney] Showing CURRENT STATE before round " .. tournament.current_round .. " battles to all players")
