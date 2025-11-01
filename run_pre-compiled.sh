@@ -1,1 +1,1 @@
-./net_battle_server -p 9999
+net_battle_server -p 9999
