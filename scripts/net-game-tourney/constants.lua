@@ -62,6 +62,9 @@ local CONSTANTS = {
     default_bn4_title_banner_anim = ui_element_paths.."title-banners-bn4/title-banner.anim",    
     -- Default Music and SFX.
     default_tourney_announcement_music = "/server/assets/tourney/music/bbn4_tournament_announcement.ogg",
+    -- Delay before we should start battles for all players for board close We need to make it async for timing but not lock as we want to show to all players at the same time. Below will be values to use for waiting immediately after showing a board before starting battles.
+    first_show_board_time = 13,
+    first_show_board_sleep_time_fix = 15,
 }
 
 return CONSTANTS

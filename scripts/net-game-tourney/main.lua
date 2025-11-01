@@ -497,7 +497,7 @@ local function show_tournament_stage(player_id, tournament, stage_type, is_curre
         end
         
         Net.fade_player_camera(player_id, { r = 0, g = 0, b = 0, a = 0 }, 0.3)
-        await(Async.sleep(12.5)) -- Show positions
+        await(Async.sleep(constants.first_show_board_time)) -- Show positions
         
         Net.fade_player_camera(player_id, { r = 0, g = 0, b = 0, a = 255 }, 0.3)
         await(Async.sleep(0.3))
@@ -895,7 +895,7 @@ local function run_tournament_battles(tournament_id)
         if tournament.current_round == 1 then
             print("[tourney] Showing initial tournament board to all players")
             show_board_to_all_players(tournament, show_tournament_stage, "initial", false)
-            await(Async.sleep(8.0)) -- Additional pause after all boards are shown
+            await(Async.sleep(constants.first_show_board_sleep_time_fix)) -- Additional pause after all boards are shown
         else
             -- For subsequent rounds, show the CURRENT STATE (positions from previous round)
             print("[tourney] Showing CURRENT STATE before round " .. tournament.current_round .. " battles to all players")
