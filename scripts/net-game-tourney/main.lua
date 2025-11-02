@@ -648,14 +648,6 @@ local function start_battle(player1_id, player2_id, tournament_id, match_index)
             print("[tourney] One or both players disconnected, cannot start battle")
             return nil
         end
-        
-        -- Re-activate framework for players after battle if needed
-        for _, player_id in ipairs(players_to_cleanup) do
-            if Net.is_player(player_id) then
-                games.activate_framework(player_id)
-                games.freeze_player(player_id)
-            end
-        end
     end)
 end
 
@@ -930,48 +922,48 @@ local function run_tournament_battles(tournament_id)
         print("[tourney] All battles started for round " .. tournament.current_round)
         
         -- FIXED: Use enhanced waiting with verification
-        local battles_completed = await(wait_for_all_battles_complete(tournament_id))
+        -- await(wait_for_all_battles_complete(tournament_id))
         
-        if not battles_completed then
-            print("[tourney] WARNING: Not all battles completed properly, but proceeding anyway")
+        -- if not battles_completed then
+        --    print("[tourney] WARNING: Not all battles completed properly, but proceeding anyway")
             -- Force completion of any remaining matches
-            for i, match in ipairs(tournament.matches) do
-                if not match.completed then
-                    print("[tourney] Forcing completion of match " .. i)
+        --    for i, match in ipairs(tournament.matches) do
+        --        if not match.completed then
+        --            print("[tourney] Forcing completion of match " .. i)
                     -- For NPC battles, determine winner by weight
-                    if string.find(match.player1.player_id, ".zip") and string.find(match.player2.player_id, ".zip") then
-                        local npc1_weight = get_npc_weight(match.player1.player_id)
-                        local npc2_weight = get_npc_weight(match.player2.player_id)
-                        local winner, loser
+        --            if string.find(match.player1.player_id, ".zip") and string.find(match.player2.player_id, ".zip") then
+        --                local npc1_weight = get_npc_weight(match.player1.player_id)
+        --                local npc2_weight = get_npc_weight(match.player2.player_id)
+        --                local winner, loser
                         
-                        if math.random(1, npc1_weight + npc2_weight) <= npc1_weight then
-                            winner = match.player1
-                            loser = match.player2
-                        else
-                            winner = match.player2
-                            loser = match.player1
-                        end
+        --                if math.random(1, npc1_weight + npc2_weight) <= npc1_weight then
+        --                    winner = match.player1
+        --                    loser = match.player2
+        --                else
+        --                    winner = match.player2
+        --                    loser = match.player1
+        --                end
                         
-                        match.completed = true
-                        match.winner = winner
-                        match.loser = loser
-                        TournamentState.record_battle_result(tournament_id, i, winner, loser)
-                        print(string.format("[tourney] Forced NPC battle result: %s defeated %s", winner.player_id, loser.player_id))
-                    else
-                        -- PLAYER BATTLES ARE NEVER FORCED - they must complete naturally
-                        print(string.format("[tourney] NOT forcing player battle: %s vs %s - waiting for natural completion", 
-                              match.player1.player_id, match.player2.player_id))
-                              print("[tourney] Round " .. tournament.current_round .. " winners:")
-                        for i, winner in ipairs(tournament.winners) do
-                        print(string.format("  Winner %d: %s", i, winner.player_id))
-                        end
-                        -- Do not force player battles - they will complete naturally
-                    end
-                end
-            end
-        end
+        --                match.completed = true
+         --               match.winner = winner
+        --                match.loser = loser
+        --                TournamentState.record_battle_result(tournament_id, i, winner, loser)
+        --                print(string.format("[tourney] Forced NPC battle result: %s defeated %s", winner.player_id, loser.player_id))
+        --            else
+        --                -- PLAYER BATTLES ARE NEVER FORCED - they must complete naturally
+        --                print(string.format("[tourney] NOT forcing player battle: %s vs %s - waiting for natural completion", 
+        --                      match.player1.player_id, match.player2.player_id))
+        --                      print("[tourney] Round " .. tournament.current_round .. " winners:")
+        --                for i, winner in ipairs(tournament.winners) do
+        --                print(string.format("  Winner %d: %s", i, winner.player_id))
+        --                end
+        --                -- Do not force player battles - they will complete naturally
+        --            end
+        --        end
+        --    end
+        --end
         
-        print("[tourney] All battles completed for round " .. tournament.current_round)
+        -- print("[tourney] All battles completed for round " .. tournament.current_round)
         
         -- FIXED: Add additional delay to ensure all battle results are processed
         await(Async.sleep(1.0))
