@@ -35,7 +35,6 @@ local games = require("scripts/net-games/framework")
 local TournamentState = require("scripts/net-game-tourney/tournament-state")
 local TournamentUtils = require("scripts/net-game-tourney/tournament-utils")
 local TourneyEmitters = require("scripts/net-game-tourney/emitters")
-local TourneyConstants = require("scripts/net-game-tourney/constants")
 local TableUtils = require("scripts/table-utils")
 
 
@@ -104,7 +103,7 @@ function TournamentAPI.add_player(tournament_id, player_id, mugshot_data)
             local player_mugshot = Net.get_player_mugshot(player_id)
             mugshot_data = {
                 mug_texture = player_mugshot.texture_path,
-                mug_animation = TourneyConstants.default_mug_anim
+                mug_animation = "/server/assets/tourney/mug.anim"
             }
         end
         
@@ -182,7 +181,7 @@ function TournamentAPI.start_tournament(tournament_id)
         
         -- Set up board data
         local constants = require("scripts/net-game-tourney/constants")
-        local board_background_info = constants.bn4_bg_data[tournament.config.board_theme or "red_orange_bn4"]
+        local board_background_info = constants.bracket_background_path[tournament.config.board_theme or "red_orange_bn4"]
         
         -- Store board data for UI
         local function store_tournament_board_data(t_id, background_info, participants)

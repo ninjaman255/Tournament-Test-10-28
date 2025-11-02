@@ -1,4 +1,4 @@
-local default_mug_anim = "/server/assets/tourney/tourney-board-elements/mug.anim"
+local default_mug_anim = "/server/assets/tourney/mug.anim"
 local npc_path = "/server/assets/tourney/npc-navis-testing/"
 
 local NPC_LIST = {

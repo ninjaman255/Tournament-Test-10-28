@@ -174,9 +174,9 @@ end
 local function add_participant_mugshot(player_id, mugshot_id, mug_texture_path, x, y, z)
     local z_pos = z or 2  -- Default to 2 if z is not provided
     games.add_ui_element("MUG_FRAME_" .. mugshot_id, player_id,
-        constants.default_mini_mug_texture, constants.default_mini_mug_anim, "ACTIVE", x, y, z_pos + 1)  -- Frame above mugshot
+        "/server/assets/tourney/tourney-board-elements/mini-mug-frame.png", "/server/assets/tourney/tourney-board-elements/mini-mug-frame.anim", "ACTIVE", x, y, z_pos + 1)  -- Frame above mugshot
     games.add_ui_element("MUG_" .. mugshot_id, player_id, mug_texture_path,
-        constants.default_mug_anim, "UI", x, y, z_pos, .50, .50)
+        default_mug_anim, "UI", x, y, z_pos, .50, .50)
 end
 
 -- Enhanced function to remove specific participant mugshot
@@ -194,8 +194,8 @@ local function setup_board_bg_elements(player_id, info)
         constants.default_bracket_anim_path_bn4, "UI", bracket_pos.x, bracket_pos.y, bracket_pos.z)
     games.add_ui_element("CHAMPION TOPPER", player_id, constants.champion_topper_bn4,
         constants.champion_topper_bn4_anim, "UI", champion_topper_pos.x, champion_topper_pos.y, champion_topper_pos.z)
-    games.add_ui_element("TITLE BANNER", player_id, constants.bn4_default_titles.free_tournament,
-        constants.default_bn4_title_banner_anim, "UI", title_banner_pos.x, title_banner_pos.y, title_banner_pos.z)
+    games.add_ui_element("TITLE BANNER", player_id, "/server/assets/tourney/title-banner.png",
+        "/server/assets/tourney/title-banner.anim", "RED", title_banner_pos.x, title_banner_pos.y, title_banner_pos.z)
     games.add_ui_element("CROWN_1", player_id, constants.crown_texture_path,
         constants.crown_anim_path, "INACTIVE", crown1_pos.x, crown1_pos.y, crown1_pos.z)
     games.add_ui_element("CROWN_2", player_id, constants.crown_texture_path,
@@ -269,12 +269,12 @@ local function show_tournament_results_with_animation(player_id, tournament, rou
             print("[tourney] No board data stored for tournament")
             return
         end
-        Net.toggle_player_hud(player_id)
+        
         local player_area = Net.get_player_area(player_id)
         local original_map_name = Net.get_area_name(player_area)
         Net.set_area_name(player_area, "            ")
         local original_map_song = Net.get_song(player_area)
-        Net.set_song(player_area, constants.default_tourney_announcement_music)
+        Net.set_song(player_area, "/server/assets/tourney/music/bbn4_tournament_announcement.ogg")
 
         games.activate_framework(player_id)
         games.freeze_player(player_id)
@@ -408,7 +408,6 @@ local function show_tournament_results_with_animation(player_id, tournament, rou
         Net.fade_player_camera(player_id, { r = 0, g = 0, b = 0, a = 0 }, 0.3)
         Net.unlock_player_input(player_id)
         games.deactivate_framework(player_id)
-        Net.toggle_player_hud(player_id)
         return true
     end)
 end
@@ -420,12 +419,12 @@ local function show_tournament_stage(player_id, tournament, stage_type, is_curre
             print("[tourney] No board data stored for tournament")
             return
         end
-        Net.toggle_player_hud(player_id)
+        
         local player_area = Net.get_player_area(player_id)
         local original_map_name = Net.get_area_name(player_area)
         Net.set_area_name(player_area, "            ")
         local original_map_song = Net.get_song(player_area)
-        Net.set_song(player_area, constants.default_tourney_announcement_music)
+        Net.set_song(player_area, "/server/assets/tourney/music/bbn4_tournament_announcement.ogg")
 
         games.activate_framework(player_id)
         games.freeze_player(player_id)
@@ -497,7 +496,7 @@ local function show_tournament_stage(player_id, tournament, stage_type, is_curre
         end
         
         Net.fade_player_camera(player_id, { r = 0, g = 0, b = 0, a = 0 }, 0.3)
-        await(Async.sleep(constants.first_show_board_time)) -- Show positions
+        await(Async.sleep(12.5)) -- Show positions
         
         Net.fade_player_camera(player_id, { r = 0, g = 0, b = 0, a = 255 }, 0.3)
         await(Async.sleep(0.3))
@@ -506,7 +505,6 @@ local function show_tournament_stage(player_id, tournament, stage_type, is_curre
         Net.fade_player_camera(player_id, { r = 0, g = 0, b = 0, a = 0 }, 0.3)
         Net.unlock_player_input(player_id)
         games.deactivate_framework(player_id)
-        Net.toggle_player_hud(player_id)
     end)
 end
 
@@ -647,6 +645,14 @@ local function start_battle(player1_id, player2_id, tournament_id, match_index)
             -- One or both players disconnected, handle accordingly
             print("[tourney] One or both players disconnected, cannot start battle")
             return nil
+        end
+        
+        -- Re-activate framework for players after battle if needed
+        for _, player_id in ipairs(players_to_cleanup) do
+            if Net.is_player(player_id) then
+                games.activate_framework(player_id)
+                games.freeze_player(player_id)
+            end
         end
     end)
 end
@@ -887,7 +893,7 @@ local function run_tournament_battles(tournament_id)
         if tournament.current_round == 1 then
             print("[tourney] Showing initial tournament board to all players")
             show_board_to_all_players(tournament, show_tournament_stage, "initial", false)
-            await(Async.sleep(constants.first_show_board_sleep_time_fix)) -- Additional pause after all boards are shown
+            await(Async.sleep(2.0)) -- Additional pause after all boards are shown
         else
             -- For subsequent rounds, show the CURRENT STATE (positions from previous round)
             print("[tourney] Showing CURRENT STATE before round " .. tournament.current_round .. " battles to all players")
@@ -922,48 +928,48 @@ local function run_tournament_battles(tournament_id)
         print("[tourney] All battles started for round " .. tournament.current_round)
         
         -- FIXED: Use enhanced waiting with verification
-        -- await(wait_for_all_battles_complete(tournament_id))
+        local battles_completed = await(wait_for_all_battles_complete(tournament_id))
         
-        -- if not battles_completed then
-        --    print("[tourney] WARNING: Not all battles completed properly, but proceeding anyway")
+        if not battles_completed then
+            print("[tourney] WARNING: Not all battles completed properly, but proceeding anyway")
             -- Force completion of any remaining matches
-        --    for i, match in ipairs(tournament.matches) do
-        --        if not match.completed then
-        --            print("[tourney] Forcing completion of match " .. i)
+            for i, match in ipairs(tournament.matches) do
+                if not match.completed then
+                    print("[tourney] Forcing completion of match " .. i)
                     -- For NPC battles, determine winner by weight
-        --            if string.find(match.player1.player_id, ".zip") and string.find(match.player2.player_id, ".zip") then
-        --                local npc1_weight = get_npc_weight(match.player1.player_id)
-        --                local npc2_weight = get_npc_weight(match.player2.player_id)
-        --                local winner, loser
+                    if string.find(match.player1.player_id, ".zip") and string.find(match.player2.player_id, ".zip") then
+                        local npc1_weight = get_npc_weight(match.player1.player_id)
+                        local npc2_weight = get_npc_weight(match.player2.player_id)
+                        local winner, loser
                         
-        --                if math.random(1, npc1_weight + npc2_weight) <= npc1_weight then
-        --                    winner = match.player1
-        --                    loser = match.player2
-        --                else
-        --                    winner = match.player2
-        --                    loser = match.player1
-        --                end
+                        if math.random(1, npc1_weight + npc2_weight) <= npc1_weight then
+                            winner = match.player1
+                            loser = match.player2
+                        else
+                            winner = match.player2
+                            loser = match.player1
+                        end
                         
-        --                match.completed = true
-         --               match.winner = winner
-        --                match.loser = loser
-        --                TournamentState.record_battle_result(tournament_id, i, winner, loser)
-        --                print(string.format("[tourney] Forced NPC battle result: %s defeated %s", winner.player_id, loser.player_id))
-        --            else
-        --                -- PLAYER BATTLES ARE NEVER FORCED - they must complete naturally
-        --                print(string.format("[tourney] NOT forcing player battle: %s vs %s - waiting for natural completion", 
-        --                      match.player1.player_id, match.player2.player_id))
-        --                      print("[tourney] Round " .. tournament.current_round .. " winners:")
-        --                for i, winner in ipairs(tournament.winners) do
-        --                print(string.format("  Winner %d: %s", i, winner.player_id))
-        --                end
-        --                -- Do not force player battles - they will complete naturally
-        --            end
-        --        end
-        --    end
-        --end
+                        match.completed = true
+                        match.winner = winner
+                        match.loser = loser
+                        TournamentState.record_battle_result(tournament_id, i, winner, loser)
+                        print(string.format("[tourney] Forced NPC battle result: %s defeated %s", winner.player_id, loser.player_id))
+                    else
+                        -- PLAYER BATTLES ARE NEVER FORCED - they must complete naturally
+                        print(string.format("[tourney] NOT forcing player battle: %s vs %s - waiting for natural completion", 
+                              match.player1.player_id, match.player2.player_id))
+                              print("[tourney] Round " .. tournament.current_round .. " winners:")
+                        for i, winner in ipairs(tournament.winners) do
+                        print(string.format("  Winner %d: %s", i, winner.player_id))
+                        end
+                        -- Do not force player battles - they will complete naturally
+                    end
+                end
+            end
+        end
         
-        -- print("[tourney] All battles completed for round " .. tournament.current_round)
+        print("[tourney] All battles completed for round " .. tournament.current_round)
         
         -- FIXED: Add additional delay to ensure all battle results are processed
         await(Async.sleep(1.0))

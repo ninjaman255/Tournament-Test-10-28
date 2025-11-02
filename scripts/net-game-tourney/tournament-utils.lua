@@ -193,7 +193,7 @@ end
 function TournamentUtils.get_board_background_and_grid(object, TiledUtils, constants)
     if not TiledUtils.check_custom_prop_validity(object.custom_properties, "Board Background") then return end
     local bg = object.custom_properties["Board Background"]
-    local p = constants.bn4_bg_data
+    local p = constants.bracket_background_path
     return p[bg] or p.red_orange_bn4
 end
 
