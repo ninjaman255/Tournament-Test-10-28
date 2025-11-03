@@ -24,6 +24,9 @@ function TextDisplay:init()
         anim_path = nil
     }
     
+    -- Marquee wrapping gap (pixels of blank space when text wraps)
+    self.marquee_wrap_gap = 40  -- Increased from 20 to 40 for more noticeable gap
+    
     Net:on("player_join", function(event)
         self:setupPlayerTextDisplays(event.player_id)
     end)
@@ -147,7 +150,8 @@ function TextDisplay:drawMarqueeText(player_id, marquee_id, text, y, font_name, 
         bounds_right = bounds_right,
         bounds_width = bounds_width,
         character_objects = {},
-        individual_chars = {} -- Store individual character data for wrapping
+        individual_chars = {}, -- Store individual character data for wrapping
+        wrap_gap = self.marquee_wrap_gap -- Store the wrap gap for this marquee
     }
     
     -- Pre-calculate character positions for individual wrapping
@@ -308,15 +312,15 @@ function TextDisplay:wrapMarqueeCharacters(text_data)
         end
     end
     
-    -- Wrap characters that have left the bounds
+    -- Wrap characters that have left the bounds with added gap
     for i, char_data in ipairs(text_data.individual_chars) do
         if char_data.current_x + char_data.width < text_data.bounds_left then
-            -- Move this character to the right of the rightmost character
-            local wrap_x = rightmost_x + char_data.width + 1
+            -- Move this character to the right of the rightmost character PLUS the wrap gap
+            local wrap_x = rightmost_x + text_data.wrap_gap
             
-            -- If this would put it outside bounds, use bounds_right
+            -- If this would put it outside bounds, use bounds_right plus gap
             if wrap_x > text_data.bounds_right then
-                wrap_x = text_data.bounds_right
+                wrap_x = text_data.bounds_right + text_data.wrap_gap
             end
             
             char_data.current_x = wrap_x
@@ -516,6 +520,17 @@ function TextDisplay:removeBackdrop(player_id, text_id)
                 -- Reset character positions
                 self:setupIndividualCharacters(text_data)
             end
+        end
+    end
+end
+
+-- Set marquee wrap gap (can be called to adjust the gap for specific marquees)
+function TextDisplay:setMarqueeWrapGap(player_id, text_id, gap_pixels)
+    local player_data = self.player_texts[player_id]
+    if player_data then
+        local text_data = player_data.active_texts[text_id]
+        if text_data and text_data.type == "marquee" then
+            text_data.wrap_gap = gap_pixels or self.marquee_wrap_gap
         end
     end
 end
