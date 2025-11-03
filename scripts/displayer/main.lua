@@ -118,18 +118,18 @@ Net:on("tick", function(event)
             }
             
             -- FIXED: Create the fullscreen scrolling list with proper configuration
-            local success = displayer.ScrollingText:createList(player_id, "fullscreen_display", 0, 0, 240, 160, {
+            local success = displayer.ScrollingText:createList(player_id, "fullscreen_display", 0, 0, 480, 320, {
                 texts = fullscreen_messages,
                 scroll_speed = 40,  -- Increased speed for large text
                 entry_delay = 2.0,
-                font = "BATTLE",    -- Use BATTLE font for better visibility at large scale
-                scale = 3.0,        -- 3x scale
+                font = "THICK",    -- Use BATTLE font for better visibility at large scale
+                scale = 2.0,        -- 3x scale
                 z_order = 50,       -- Lower z-order to ensure it's visible
                 loop = true,
                 backdrop = {
-                    x = 0, y = 0, width = 240, height = 160,
-                    padding_x = 20,  -- Increased padding for large text
-                    padding_y = 20
+                    x = 0, y = 0, width = 480, height = 320,
+                    padding_x = 0,  -- Increased padding for large text
+                    padding_y = 0
                 },
                 destroy_when_finished = false
             })
@@ -220,11 +220,11 @@ Net:on("create_fullscreen", function(event)
     -- Remove any existing fullscreen list first
     displayer.ScrollingText:removeList(player_id, "manual_fullscreen")
     
-    local success = displayer.ScrollingText:createList(player_id, "manual_fullscreen", 0, 0, 240, 160, {
+    local success = displayer.ScrollingText:createList(player_id, "manual_fullscreen", 120, 80, 240, 160, {
         texts = messages,
         scroll_speed = 40,
         entry_delay = 2.0,
-        font = "BATTLE",
+        font = "THICK",
         scale = 3.0,
         z_order = 50,
         loop = true,
