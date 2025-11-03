@@ -269,7 +269,7 @@ local function show_tournament_results_with_animation(player_id, tournament, rou
             print("[tourney] No board data stored for tournament")
             return
         end
-        
+        Net.toggle_player_hud(player_id)
         local player_area = Net.get_player_area(player_id)
         local original_map_name = Net.get_area_name(player_area)
         Net.set_area_name(player_area, "            ")
@@ -400,6 +400,7 @@ local function show_tournament_results_with_animation(player_id, tournament, rou
             await(Async.sleep(2.0))
         end
         
+        Net.toggle_player_hud(player_id)
         -- Clean up (only after everything is complete)
         Net.fade_player_camera(player_id, { r = 0, g = 0, b = 0, a = 255 }, 0.3)
         await(Async.sleep(0.3))
@@ -420,6 +421,7 @@ local function show_tournament_stage(player_id, tournament, stage_type, is_curre
             return
         end
         
+        Net.toggle_player_hud(player_id)
         local player_area = Net.get_player_area(player_id)
         local original_map_name = Net.get_area_name(player_area)
         Net.set_area_name(player_area, "            ")
@@ -501,6 +503,7 @@ local function show_tournament_stage(player_id, tournament, stage_type, is_curre
         Net.fade_player_camera(player_id, { r = 0, g = 0, b = 0, a = 255 }, 0.3)
         await(Async.sleep(0.3))
         cleanup_ui(player_id, player_area, original_map_name, original_map_song)
+        Net.toggle_player_hud(player_id)
         await(Async.sleep(0.1))
         Net.fade_player_camera(player_id, { r = 0, g = 0, b = 0, a = 0 }, 0.3)
         Net.unlock_player_input(player_id)
