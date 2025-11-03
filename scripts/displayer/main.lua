@@ -37,9 +37,15 @@ Net:on("player_join", function(event)
     
     -- Hide default HUD
     displayer:hidePlayerHUD(player_id)
-    
-    -- Create global timer display (top-left)
+    -- In the player_join handler, change the global timer display creation to:
     displayer.TimerDisplay:createGlobalTimerDisplay("global_timer", 10, 10, "large")
+
+    -- And ensure the scrolling list has a lower z-order:
+    displayer.ScrollingText:createList(player_id, "fullscreen_display", 0, 0, 480, 320, {
+        -- ... other config
+        z_order = 50,  -- Lower than timer display's 100
+        -- ... other config
+    })
     displayer.TimerDisplay:updateGlobalTimerDisplay("global_timer", global_timer.elapsed_time)
     
     -- Create news marquee (top-center)
