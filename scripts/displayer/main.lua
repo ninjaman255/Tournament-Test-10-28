@@ -20,6 +20,13 @@ local PLAYER_X, PLAYER_Y = 120, 80
 local TIMER_Y = PLAYER_Y + 20  -- 20 pixels below player
 local COUNTDOWN_Y = PLAYER_Y + 40  -- 40 pixels below player (20 pixels below timer)
 
+-- Text display positions (arranged top to bottom with gaps)
+local NEWS_MARQUEE_Y = 10
+local STORY_BOX_Y = 30
+local NOTIFICATION_Y = 105
+local WELCOME_BOX_Y = 140
+local STATIC_TEXT_Y = 125
+
 -- Function to start global timer
 local function startGlobalTimers()
     global_timers.session_running = true
@@ -60,31 +67,32 @@ Net:on("player_join", function(event)
     -- Update the new player with current global timer value
     TimerDisplay:updateGlobalTimerDisplay("session_timer", global_timers.session_timer)
     
-    -- Create text displays
-    -- Static welcome text
-    TextDisplay:drawText(player_id, "WELCOME PLAYER", 10, 140, "THICK", 1.0, 100)
-    TextDisplay:addBackdrop(player_id, "text_1", {
-        x = 5, y = 135, width = 120, height = 20,
-        padding_x = 4,
-        padding_y = 2
-    })
+    -- Create text displays with non-overlapping positions
     
-    -- News marquee with backdrop that constrains the text
+    -- News marquee at the top - text bound to backdrop area
     TextDisplay:drawMarqueeText(player_id, "news_ticker", 
         "Welcome to the game! Timers are positioned below your character!",
-        30, "THICK", 1.0, 100, "slow", {
-            x = 10, y = 25, width = 220, height = 15,
+        NEWS_MARQUEE_Y, "THICK", 1.0, 100, "slow", {
+            x = 10, y = NEWS_MARQUEE_Y - 5, width = 220, height = 20,
             padding_x = 8,
             padding_y = 2
         })
     
-    -- MegaMan Battle Network Style Text Box
+    -- Static welcome text (moved to avoid overlap)
+    TextDisplay:drawText(player_id, "WELCOME PLAYER", 10, STATIC_TEXT_Y, "THICK", 1.0, 100)
+    TextDisplay:addBackdrop(player_id, "text_1", {
+        x = 5, y = STATIC_TEXT_Y - 5, width = 120, height = 20,
+        padding_x = 4,
+        padding_y = 2
+    })
+    
+    -- MegaMan Battle Network Style Text Box at the bottom
     local welcome_text = "Welcome to the arena! Your mission is to survive for as long as possible. " ..
                         "Use your abilities wisely and watch your timers. " ..
                         "Good luck, operator! The battle begins in moments..."
     
-    TextDisplay:createTextBox(player_id, "welcome_box", welcome_text, 20, 150, 200, 50, "THICK", 1.0, 100, {
-        x = 15, y = 140, width = 210, height = 60,
+    TextDisplay:createTextBox(player_id, "welcome_box", welcome_text, 20, WELCOME_BOX_Y, 200, 50, "THICK", 1.0, 100, {
+        x = 15, y = WELCOME_BOX_Y - 10, width = 210, height = 60,
         padding_x = 8,
         padding_y = 6
     }, 25) -- 25 characters per second
@@ -168,26 +176,26 @@ Net:on("reset_countdown", function(event)
     end
 end)
 
--- Command to add new marquee
+-- Command to add new marquee with backdrop (text bound to backdrop area)
 Net:on("add_marquee", function(event)
     local player_id = event.player_id
-    local text = event.text or "New marquee text"
+    local text = event.text or "New marquee text with backdrop - text is properly constrained within the backdrop boundaries"
     local speed = event.speed or "medium"
     
-    TextDisplay:drawMarqueeText(player_id, "custom_marquee", text, 90, "THICK", 1.0, 100, speed, {
-        x = 20, y = 85, width = 200, height = 15,
-        padding_x = 4,
-        padding_y = 2
+    TextDisplay:drawMarqueeText(player_id, "custom_marquee", text, 60, "THICK", 1.0, 100, speed, {
+        x = 20, y = 55, width = 200, height = 20,
+        padding_x = 8,
+        padding_y = 4
     })
 end)
 
 -- Command to add marquee without backdrop
 Net:on("add_marquee_no_backdrop", function(event)
     local player_id = event.player_id
-    local text = event.text or "New marquee text"
+    local text = event.text or "New marquee text without backdrop - free movement"
     local speed = event.speed or "medium"
     
-    TextDisplay:drawMarqueeText(player_id, "custom_marquee", text, 90, "THICK", 1.0, 100, speed)
+    TextDisplay:drawMarqueeText(player_id, "custom_marquee", text, 60, "THICK", 1.0, 100, speed)
 end)
 
 -- Command to update existing text
@@ -222,8 +230,8 @@ Net:on("create_text_box", function(event)
     local text = event.text or "This is a sample text box that demonstrates the MegaMan Battle Network style text display system. It shows text character by character with proper word wrapping and automatic pagination. You can use this for dialogues, instructions, or story elements in your game."
     local speed = event.speed or 25
     
-    TextDisplay:createTextBox(player_id, "story_box", text, 20, 30, 200, 80, "THICK", 1.0, 100, {
-        x = 15, y = 25, width = 210, height = 90,
+    TextDisplay:createTextBox(player_id, "story_box", text, 20, STORY_BOX_Y, 200, 80, "THICK", 1.0, 100, {
+        x = 15, y = STORY_BOX_Y - 10, width = 210, height = 90,
         padding_x = 8,
         padding_y = 6
     }, speed)
@@ -264,8 +272,8 @@ Net:on("create_story", function(event)
                       "Use your abilities wisely and remember: timing is everything. " ..
                       "The fate of the digital world rests in your hands. Good luck!"
     
-    TextDisplay:createTextBox(player_id, "story_teller", story_text, 10, 20, 220, 70, "THICK", 1.0, 100, {
-        x = 5, y = 15, width = 230, height = 80,
+    TextDisplay:createTextBox(player_id, "story_teller", story_text, 10, STORY_BOX_Y, 220, 70, "THICK", 1.0, 100, {
+        x = 5, y = STORY_BOX_Y - 5, width = 230, height = 80,
         padding_x = 10,
         padding_y = 8
     }, 20)
@@ -276,11 +284,24 @@ Net:on("create_notification", function(event)
     local player_id = event.player_id
     local notification = "Alert! New enemy detected in sector 7. Proceed with caution. Use defensive abilities and watch for attack patterns."
     
-    TextDisplay:createTextBox(player_id, "notification", notification, 40, 110, 160, 40, "THICK", 0.9, 100, {
-        x = 35, y = 105, width = 170, height = 50,
+    TextDisplay:createTextBox(player_id, "notification", notification, 40, NOTIFICATION_Y, 160, 40, "THICK", 0.9, 100, {
+        x = 35, y = NOTIFICATION_Y - 5, width = 170, height = 50,
         padding_x = 6,
         padding_y = 4
     }, 35) -- Faster speed for notifications
+end)
+
+-- Example: Create a marquee with long text to demonstrate backdrop constraint
+Net:on("create_constrained_marquee", function(event)
+    local player_id = event.player_id
+    local long_text = "This is a very long marquee text that demonstrates how the text is properly constrained within the backdrop boundaries. The text will scroll within the defined area and not overflow outside the backdrop."
+    local speed = event.speed or "slow"
+    
+    TextDisplay:drawMarqueeText(player_id, "constrained_marquee", long_text, 85, "THICK", 1.0, 100, speed, {
+        x = 15, y = 80, width = 210, height = 20,
+        padding_x = 8,
+        padding_y = 4
+    })
 end)
 
 -- Debug command to check timer states
