@@ -25,7 +25,7 @@ function TextDisplay:init()
     }
     
     -- Marquee wrapping gap (pixels of blank space when text wraps)
-    self.marquee_wrap_gap = 40  -- Increased from 20 to 40 for more noticeable gap
+    self.marquee_wrap_gap = 40
     
     Net:on("player_join", function(event)
         self:setupPlayerTextDisplays(event.player_id)
@@ -151,7 +151,9 @@ function TextDisplay:drawMarqueeText(player_id, marquee_id, text, y, font_name, 
         bounds_width = bounds_width,
         character_objects = {},
         individual_chars = {}, -- Store individual character data for wrapping
-        wrap_gap = self.marquee_wrap_gap -- Store the wrap gap for this marquee
+        wrap_gap = self.marquee_wrap_gap, -- Store the wrap gap for this marquee
+        last_wrap_time = 0, -- Track when we last wrapped to prevent rapid wrapping
+        wrap_cooldown = 0.5 -- Minimum time between wraps (seconds)
     }
     
     -- Pre-calculate character positions for individual wrapping
@@ -186,11 +188,15 @@ function TextDisplay:setupIndividualCharacters(marquee_data)
             original_x = current_x,
             current_x = current_x,
             obj_id = nil,
-            anim_state = font_name .. "_" .. char  -- Build animation state name
+            anim_state = font_name .. "_" .. char,  -- Build animation state name
+            index = i  -- Store original position for consistent spacing
         })
         
-        current_x = current_x + char_width + 1 -- Add spacing
+        current_x = current_x + char_width + 1 -- Add consistent spacing
     end
+    
+    -- Store total text width for proper wrapping
+    marquee_data.total_text_width = current_x - marquee_data.current_x - 1
 end
 
 function TextDisplay:drawMarqueeCharacters(player_id, marquee_id, marquee_data)
@@ -275,60 +281,68 @@ function TextDisplay:updateMarquees(delta)
 end
 
 function TextDisplay:updateMarquee(player_id, text_id, text_data, delta)
+    -- Update wrap cooldown
+    text_data.last_wrap_time = text_data.last_wrap_time + delta
+    
     -- Calculate movement for all characters
     local movement = text_data.speed * delta
     
-    -- Track if any characters need to wrap
+    -- Track if entire text needs to wrap
     local needs_wrap = false
+    local leftmost_char = nil
     
-    -- Update each character's position
-    for i, char_data in ipairs(text_data.individual_chars) do
-        char_data.current_x = char_data.current_x - movement
-        
-        -- Check if this character has completely left the bounds
-        if char_data.current_x + char_data.width < text_data.bounds_left then
-            needs_wrap = true
+    -- Find the leftmost character to check if entire text has left the screen
+    for _, char_data in ipairs(text_data.individual_chars) do
+        if not leftmost_char or char_data.current_x < leftmost_char.current_x then
+            leftmost_char = char_data
         end
     end
     
-    -- Handle character wrapping if needed
-    if needs_wrap then
-        self:wrapMarqueeCharacters(text_data)
+    -- Check if the entire text has moved past the left boundary
+    if leftmost_char and leftmost_char.current_x + text_data.total_text_width < text_data.bounds_left then
+        needs_wrap = true
+    end
+    
+    -- Update each character's position
+    for _, char_data in ipairs(text_data.individual_chars) do
+        char_data.current_x = char_data.current_x - movement
+    end
+    
+    -- Handle text wrapping if needed and cooldown has passed
+    if needs_wrap and text_data.last_wrap_time >= text_data.wrap_cooldown then
+        self:wrapMarqueeText(text_data)
+        text_data.last_wrap_time = 0
     end
     
     -- Redraw characters at new positions
     self:drawMarqueeCharacters(player_id, text_id, text_data)
 end
 
-function TextDisplay:wrapMarqueeCharacters(text_data)
-    -- Find the rightmost character to determine wrap position
+function TextDisplay:wrapMarqueeText(text_data)
+    -- Find the rightmost character position
     local rightmost_x = -9999
-    local rightmost_index = 1
-    
-    for i, char_data in ipairs(text_data.individual_chars) do
+    for _, char_data in ipairs(text_data.individual_chars) do
         if char_data.current_x > rightmost_x then
             rightmost_x = char_data.current_x
-            rightmost_index = i
         end
     end
     
-    -- Wrap characters that have left the bounds with added gap
-    for i, char_data in ipairs(text_data.individual_chars) do
-        if char_data.current_x + char_data.width < text_data.bounds_left then
-            -- Move this character to the right of the rightmost character PLUS the wrap gap
-            local wrap_x = rightmost_x + text_data.wrap_gap
-            
-            -- If this would put it outside bounds, use bounds_right plus gap
-            if wrap_x > text_data.bounds_right then
-                wrap_x = text_data.bounds_right + text_data.wrap_gap
-            end
-            
-            char_data.current_x = wrap_x
-            
-            -- Update rightmost position
-            rightmost_x = wrap_x
-            rightmost_index = i
+    -- Wrap the entire text as a unit to maintain monospacing
+    local wrap_position = rightmost_x + text_data.wrap_gap
+    
+    -- Calculate the offset needed to move the entire text
+    local leftmost_x = 9999
+    for _, char_data in ipairs(text_data.individual_chars) do
+        if char_data.current_x < leftmost_x then
+            leftmost_x = char_data.current_x
         end
+    end
+    
+    local offset = wrap_position - leftmost_x
+    
+    -- Move all characters by the same offset to maintain relative positions
+    for _, char_data in ipairs(text_data.individual_chars) do
+        char_data.current_x = char_data.current_x + offset
     end
 end
 
