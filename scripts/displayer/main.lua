@@ -1,4 +1,4 @@
--- Combined Main File - Timers and Text Display (Fixed Player Position)
+-- Combined Main File - Timers, Text Display, and Text Box System (Fixed Player Position)
 local TimerDisplay = require("scripts/displayer/timer-display")
 local TextDisplay = require("scripts/displayer/text-display")
 
@@ -77,6 +77,17 @@ Net:on("player_join", function(event)
             padding_x = 8,
             padding_y = 2
         })
+    
+    -- MegaMan Battle Network Style Text Box
+    local welcome_text = "Welcome to the arena! Your mission is to survive for as long as possible. " ..
+                        "Use your abilities wisely and watch your timers. " ..
+                        "Good luck, operator! The battle begins in moments..."
+    
+    TextDisplay:createTextBox(player_id, "welcome_box", welcome_text, 20, 150, 200, 50, "THICK", 1.0, 100, {
+        x = 15, y = 140, width = 210, height = 60,
+        padding_x = 8,
+        padding_y = 6
+    }, 25) -- 25 characters per second
     
     -- Mark player as waiting for timer start
     players_waiting_for_start[player_id] = true
@@ -205,6 +216,73 @@ Net:on("remove_text", function(event)
     TextDisplay:removeText(player_id, text_id)
 end)
 
+-- Text Box Commands
+Net:on("create_text_box", function(event)
+    local player_id = event.player_id
+    local text = event.text or "This is a sample text box that demonstrates the MegaMan Battle Network style text display system. It shows text character by character with proper word wrapping and automatic pagination. You can use this for dialogues, instructions, or story elements in your game."
+    local speed = event.speed or 25
+    
+    TextDisplay:createTextBox(player_id, "story_box", text, 20, 30, 200, 80, "THICK", 1.0, 100, {
+        x = 15, y = 25, width = 210, height = 90,
+        padding_x = 8,
+        padding_y = 6
+    }, speed)
+    
+    print("Created text box for player " .. player_id)
+end)
+
+Net:on("advance_text_box", function(event)
+    local player_id = event.player_id
+    local box_id = event.box_id or "story_box"
+    
+    TextDisplay:advanceTextBox(player_id, box_id)
+    print("Advanced text box for player " .. player_id)
+end)
+
+Net:on("remove_text_box", function(event)
+    local player_id = event.player_id
+    local box_id = event.box_id or "story_box"
+    
+    TextDisplay:removeTextBox(player_id, box_id)
+    print("Removed text box for player " .. player_id)
+end)
+
+Net:on("check_text_box", function(event)
+    local player_id = event.player_id
+    local box_id = event.box_id or "story_box"
+    
+    local completed = TextDisplay:isTextBoxCompleted(player_id, box_id)
+    print("Text box completed: " .. tostring(completed))
+end)
+
+-- Example: Create a multi-page story text box
+Net:on("create_story", function(event)
+    local player_id = event.player_id
+    local story_text = "In the year 210X, the digital world has become intertwined with our reality. " ..
+                      "As a net operator, you have been chosen to participate in the annual tournament. " ..
+                      "Your mission is to survive against waves of digital creatures and other operators. " ..
+                      "Use your abilities wisely and remember: timing is everything. " ..
+                      "The fate of the digital world rests in your hands. Good luck!"
+    
+    TextDisplay:createTextBox(player_id, "story_teller", story_text, 10, 20, 220, 70, "THICK", 1.0, 100, {
+        x = 5, y = 15, width = 230, height = 80,
+        padding_x = 10,
+        padding_y = 8
+    }, 20)
+end)
+
+-- Example: Create a quick notification text box
+Net:on("create_notification", function(event)
+    local player_id = event.player_id
+    local notification = "Alert! New enemy detected in sector 7. Proceed with caution. Use defensive abilities and watch for attack patterns."
+    
+    TextDisplay:createTextBox(player_id, "notification", notification, 40, 110, 160, 40, "THICK", 0.9, 100, {
+        x = 35, y = 105, width = 170, height = 50,
+        padding_x = 6,
+        padding_y = 4
+    }, 35) -- Faster speed for notifications
+end)
+
 -- Debug command to check timer states
 Net:on("debug_timers", function(event)
     local player_id = event.player_id
@@ -231,4 +309,4 @@ function table_count(t)
     return count
 end
 
-print("Combined timer and text system loaded successfully!")
+print("Combined timer, text display, and text box system loaded successfully!")
