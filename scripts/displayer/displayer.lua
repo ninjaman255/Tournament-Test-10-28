@@ -2,7 +2,6 @@
 -- Version 1.2 - Complete Method Implementation
 local Displayer = {}
 Displayer.__index = Displayer
-
 function Displayer:init()
     -- Initialize sub-APIs first (as empty tables)
     self.Timer = {}
@@ -10,6 +9,7 @@ function Displayer:init()
     self.Text = {}
     self.Font = {}
     self.ScrollingText = {}
+    self.ScrollingSprite = {}  -- ADD THIS LINE
     
     -- Load all subsystems with error handling
     local success, err = pcall(function()
@@ -18,7 +18,8 @@ function Displayer:init()
             TimerDisplaySystem = require("scripts/displayer/timer-display"),
             TextDisplaySystem = require("scripts/displayer/text-display"),
             FontSystem = require("scripts/displayer/font-system"),
-            ScrollingTextListSystem = require("scripts/displayer/scrolling-text-list")
+            ScrollingTextListSystem = require("scripts/displayer/scrolling-text-list"),
+            ScrollingSpriteListSystem = require("scripts/displayer/scrolling-sprite-list")  -- ADD THIS LINE
         }
         
         -- Initialize subsystems
@@ -563,6 +564,93 @@ function Displayer:_setupSubAPIs()
 
     self.ScrollingText.setPosition = function(player_id, list_id, x, y)
         local subsystem = mainInstance:_getSubsystem("ScrollingTextListSystem", "setListPosition")
+        if not subsystem or not player_id or not list_id then 
+            print("Error: player_id and list_id are required")
+            return false 
+        end
+        x = x or 0
+        y = y or 0
+        return subsystem:setListPosition(player_id, list_id, x, y)
+    end
+
+      -- Scrolling Sprite List System API
+    self.ScrollingSprite = {}
+   -- Change it to this (swap player_id and list_id):
+function self.ScrollingSprite:createList(list_id, player_id, x, y, width, height, config)
+    local subsystem = mainInstance:_getSubsystem("ScrollingSpriteListSystem", "createScrollingList")
+    if not subsystem or not player_id or not list_id then 
+        print("Error: player_id and list_id are required")
+        return nil 
+    end
+    return subsystem:createScrollingList(player_id, list_id, x or 0, y or 0, width or 200, height or 100, config or {})
+end
+
+    function self.ScrollingSprite:addSprite(player_id, list_id, sprite_def)
+        local subsystem = mainInstance:_getSubsystem("ScrollingSpriteListSystem", "addSpriteToList")
+        if not subsystem or not player_id or not list_id or not sprite_def then 
+            print("Error: player_id, list_id and sprite_def are required")
+            return false 
+        end
+        return subsystem:addSpriteToList(player_id, list_id, sprite_def)
+    end
+
+    function self.ScrollingSprite:setSprites(player_id, list_id, sprites)
+        local subsystem = mainInstance:_getSubsystem("ScrollingSpriteListSystem", "setListSprites")
+        if not subsystem or not player_id or not list_id then 
+            print("Error: player_id and list_id are required")
+            return false 
+        end
+        return subsystem:setListSprites(player_id, list_id, sprites or {})
+    end
+
+    function self.ScrollingSprite:getState(player_id, list_id)
+        local subsystem = mainInstance:_getSubsystem("ScrollingSpriteListSystem", "getListState")
+        if not subsystem or not player_id or not list_id then 
+            print("Error: player_id and list_id are required")
+            return nil 
+        end
+        return subsystem:getListState(player_id, list_id)
+    end
+
+    function self.ScrollingSprite:pause(player_id, list_id)
+        local subsystem = mainInstance:_getSubsystem("ScrollingSpriteListSystem", "pauseList")
+        if not subsystem or not player_id or not list_id then 
+            print("Error: player_id and list_id are required")
+            return false 
+        end
+        return subsystem:pauseList(player_id, list_id)
+    end
+
+    function self.ScrollingSprite:resume(player_id, list_id)
+        local subsystem = mainInstance:_getSubsystem("ScrollingSpriteListSystem", "resumeList")
+        if not subsystem or not player_id or not list_id then 
+            print("Error: player_id and list_id are required")
+            return false 
+        end
+        return subsystem:resumeList(player_id, list_id)
+    end
+
+    function self.ScrollingSprite:setSpeed(player_id, list_id, speed)
+        local subsystem = mainInstance:_getSubsystem("ScrollingSpriteListSystem", "setListSpeed")
+        if not subsystem or not player_id or not list_id then 
+            print("Error: player_id and list_id are required")
+            return false 
+        end
+        speed = speed or 30
+        return subsystem:setListSpeed(player_id, list_id, speed)
+    end
+
+    function self.ScrollingSprite:removeList(player_id, list_id)
+        local subsystem = mainInstance:_getSubsystem("ScrollingSpriteListSystem", "removeScrollingList")
+        if not subsystem or not player_id or not list_id then 
+            print("Error: player_id and list_id are required")
+            return nil 
+        end
+        return subsystem:removeScrollingList(player_id, list_id)
+    end
+
+    function self.ScrollingSprite:setPosition(player_id, list_id, x, y)
+        local subsystem = mainInstance:_getSubsystem("ScrollingSpriteListSystem", "setListPosition")
         if not subsystem or not player_id or not list_id then 
             print("Error: player_id and list_id are required")
             return false 
