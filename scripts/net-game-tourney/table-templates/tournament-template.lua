@@ -1,4 +1,6 @@
 local tblutils = require("scripts/table-utils")
+local constants = require("scripts/constants")
+local ui_data = require("scripts/ui-data")
 
 local TEMPLATE_TOURNAMENT_TABLE = {
     tournament_id = 0,
@@ -15,21 +17,56 @@ local TEMPLATE_TOURNAMENT_TABLE = {
     round_3_results = {},
     area_id = "",
     board_id = 0,
-    board_ui_information = {
-        tournament_title = "Tournament",
-        title_banner = { texture = "", animation = "" },
-        board_background = { texture = "", animation = "" },
-        board_grid = { texture = "", animation = "" },
-        board_bracket = { texture = "", animation = "" },
-        crowns = { texture = "", animation = "" },
-        champion_topper = { texture = "", animation = "" },
-        mugshot_frame = { texture = "", animation = "" },
-    },
+    board_ui_information = {},
     created_time = 0,
     last_updated = 0
 }
 
--- ... existing utility functions ...
+-- Helper function to build default UI information for a tournament board
+local function build_default_ui_info()
+    return {
+        tournament_title = "Free Tournament",
+        title_banner = {
+            texture = constants.title_banners.free_tourney,
+            animation = constants.default_title_banner_anim
+        },
+        board_background = {
+            texture = constants.bracket_background_path.blue_bn4.gradient_texture,
+            animation = constants.default_background_anim_path_bn4
+        },
+        board_grid = {
+            texture = constants.bracket_background_path.blue_bn4.grid_texture,
+            animation = constants.default_grid_anim_path_bn4
+        },
+        board_bracket = {
+            texture = constants.bracket_bm_bn4,
+            animation = constants.default_bracket_anim_path_bn4
+        },
+        crowns = {
+            texture = constants.crown_texture_path,
+            animation = constants.crown_anim_path,
+            positions = {
+                crown1 = ui_data.unmoving_ui_pos.crown1,
+                crown2 = ui_data.unmoving_ui_pos.crown2
+            }
+        },
+        champion_topper = {
+            texture = constants.champion_topper_bn4,
+            animation = constants.champion_topper_bn4_anim,
+            position = ui_data.unmoving_ui_pos.champion_topper_bn4
+        },
+        mugshot_frame = {
+            texture = constants.default_mug_frame.texture_path,
+            animation = constants.default_mug_frame.anim_path
+        },
+        element_positions = {
+            bg = ui_data.unmoving_ui_pos.bg,
+            grid = ui_data.unmoving_ui_pos.grid,
+            bracket = ui_data.unmoving_ui_pos.bracket,
+            title_banner = ui_data.unmoving_ui_pos.title_banner
+        }
+    }
+end
 
 function TEMPLATE_TOURNAMENT_TABLE.create_from_template(tournament_nickname, area_id, board_id)
     local new_tournament = tblutils.shallow_copy(TEMPLATE_TOURNAMENT_TABLE)
@@ -38,6 +75,7 @@ function TEMPLATE_TOURNAMENT_TABLE.create_from_template(tournament_nickname, are
     new_tournament.board_id = board_id or 0
     new_tournament.created_time = os.time()
     new_tournament.last_updated = os.time()
+    new_tournament.board_ui_information = build_default_ui_info()
     return new_tournament
 end
 

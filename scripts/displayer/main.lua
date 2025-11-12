@@ -1,27 +1,96 @@
 -- Enhanced Displayer Example - With Sprite List Support
 local Displayer = require("scripts/displayer/displayer")
 
-if not Displayer:init() or not Displayer:isValid() then
-    print("Failed to initialize Displayer API")
-    return
-end
-
-print("Displayer API loaded successfully!")
+-- Module table to be returned
+local M = {}
 
 -- Initialize player_data as an empty table at the top level
-local player_data = {}
-local global_timer = 0
+M.player_data = {}
+M.global_timer = 0
+M.initialized = false
 
 -- Use manual timer updates (more reliable than events)
-local use_manual_updates = true
+M.use_manual_updates = true
 
--- Player management
-Net:on("player_join", function(event)
-    local player_id = event.player_id
+-- Initialize function
+function M.init()
+    if M.initialized then
+        print("Displayer example already initialized")
+        return true
+    end
+    
+    if not Displayer:init() or not Displayer:isValid() then
+        print("Failed to initialize Displayer API")
+        return false
+    end
+
+    print("Displayer API loaded successfully!")
+    
+    -- Set up event handlers
+    M:setupEventHandlers()
+    
+    M.initialized = true
+    print("Enhanced Displayer example with sprite list support loaded and ready!")
+    print("Use 'create_sprite_list' command to test sprite list")
+    print("Use 'create_sprite_grid' command to test 2x2 grid")
+    print("Use 'clear_all' command to remove all displays")
+    print("Use 'reset' command to reset the mission countdown")
+    
+    return true
+end
+
+-- Set up all event handlers
+function M:setupEventHandlers()
+    -- Player management
+    Net:on("player_join", function(event)
+        self:handlePlayerJoin(event.player_id)
+    end)
+
+    -- Temporary command to manually load and test sprite list
+    Net:on("test_sprite_list", function(event)
+        self:handleTestSpriteList(event.player_id)
+    end)
+
+    -- Main update loop
+    Net:on("tick", function(event)
+        self:handleTick(event.delta_time or 0)
+    end)
+
+    -- Parameter test command
+    Net:on("test_params", function(event)
+        self:handleTestParams(event.player_id)
+    end)
+
+    -- Command to manually create sprite list
+    Net:on("create_sprite_list", function(event)
+        self:createSpriteListExample(event.player_id)
+    end)
+
+    -- Command to create a different sprite list configuration
+    Net:on("create_sprite_grid", function(event)
+        self:handleCreateSpriteGrid(event.player_id)
+    end)
+
+    -- Update the reset command
+    Net:on("reset", function(event)
+        self:handleReset(event.player_id)
+    end)
+
+    Net:on("add_text", function(event)
+        self:handleAddText(event.player_id, event.text)
+    end)
+
+    Net:on("clear_all", function(event)
+        self:handleClearAll(event.player_id)
+    end)
+end
+
+-- Player join handler
+function M:handlePlayerJoin(player_id)
     print("Player joined: " .. player_id)
     
     -- Initialize player data for this player
-    player_data[player_id] = {
+    self.player_data[player_id] = {
         session_started = false,
         join_time = os.clock(),
         scrolling_list_created = false,
@@ -41,7 +110,7 @@ Net:on("player_join", function(event)
     
     -- Create global timer display
     Displayer.TimerDisplay.createGlobalTimerDisplay("global_timer", 10, 10, "default")
-    Displayer.TimerDisplay.updateGlobalTimerDisplay("global_timer", global_timer)
+    Displayer.TimerDisplay.updateGlobalTimerDisplay("global_timer", self.global_timer)
     
     -- Create news marquee (top-center)
     Displayer.Text.drawMarqueeText(player_id, "news_ticker", 
@@ -62,23 +131,21 @@ Net:on("player_join", function(event)
     Displayer.Text.drawText(player_id, "MISSION TIMER", 12, 60, "THICK", 0.7, 100)
     
     -- Create initial countdown text for sprite list display
-    player_data[player_id].countdown_text_id = Displayer.Text.drawText(player_id, "Sprite list in: 3", 12, 90, "THICK", 0.7, 100)
+    self.player_data[player_id].countdown_text_id = Displayer.Text.drawText(player_id, "Sprite list in: 3", 12, 90, "THICK", 0.7, 100)
     
     -- Set initial timer values
     Displayer.TimerDisplay.updatePlayerTimerDisplay(player_id, "player_timer", 0)
     Displayer.TimerDisplay.updatePlayerCountdownDisplay(player_id, "mission_countdown", 60)
     
     -- Start the session immediately
-    player_data[player_id].session_started = true
+    self.player_data[player_id].session_started = true
     
     -- DEBUG: Create a simple test text to verify display is working
     Displayer.Text.drawText(player_id, "DEBUG: Display working", 10, 110, "THICK", 0.7, 100)
-end)
+end
 
--- Temporary command to manually load and test sprite list
-Net:on("test_sprite_list", function(event)
-    local player_id = event.player_id
-    
+-- Test sprite list handler
+function M:handleTestSpriteList(player_id)
     -- Manually require and test the sprite list system
     local success, spriteSystem = pcall(require, "scripts/displayer/scrolling-sprite-list")
     if not success then
@@ -137,22 +204,20 @@ Net:on("test_sprite_list", function(event)
             "Manual sprite list failed!", 
             10, 130, 100, 25, "THICK", 0.7, 100, nil, 30)
     end
-end)
+end
 
--- Main update loop
-Net:on("tick", function(event)
-    local delta = event.delta_time or 0
-    
+-- Main update handler
+function M:handleTick(delta)
     -- Update global timer
-    global_timer = global_timer + delta
-    Displayer.TimerDisplay.updateGlobalTimerDisplay("global_timer", global_timer)
+    self.global_timer = self.global_timer + delta
+    Displayer.TimerDisplay.updateGlobalTimerDisplay("global_timer", self.global_timer)
     
     -- Safe iteration through player_data
-    if not player_data then
+    if not self.player_data then
         return
     end
     
-    for player_id, data in pairs(player_data) do
+    for player_id, data in pairs(self.player_data) do
         if not data then
             goto continue
         end
@@ -177,7 +242,7 @@ Net:on("tick", function(event)
                 end
                 
                 -- Create scrolling sprite list with chat sprites
-                createSpriteListExample(player_id)
+                self:createSpriteListExample(player_id)
             end
         end
         
@@ -260,11 +325,10 @@ Net:on("tick", function(event)
         
         ::continue::
     end
-end)
+end
 
--- In main.lua, add this test command:
-Net:on("test_params", function(event)
-    local player_id = event.player_id
+-- Parameter test handler
+function M:handleTestParams(player_id)
     print("Testing parameter order for player: " .. player_id)
     
     -- Test with correct parameter order
@@ -287,9 +351,10 @@ Net:on("test_params", function(event)
         print("FAILED: Parameter order is wrong")
         Displayer.Text.drawText(player_id, "PARAMETER TEST: FAILED", 50, 30, "THICK", 0.7, 100)
     end
-end)
+end
 
-function createSpriteListExample(player_id)
+-- Sprite list creation function
+function M:createSpriteListExample(player_id)
     print("=== CREATING SPRITE LIST DEBUG ===")
     
     -- Use absolute paths and verify they exist
@@ -314,7 +379,7 @@ function createSpriteListExample(player_id)
     print("DEBUG: Attempting to create sprite list with " .. #chat_sprites .. " sprites")
     
     -- Create the scrolling sprite list
-    local success = Displayer.ScrollingSprite.createList(player_id,"chat_sprite_list", 50, 50, 100, 100, 0,{
+    local success = Displayer.ScrollingSprite:createList("chat_sprite_list", player_id, 50, 50, 100, 100, {
         sprites = chat_sprites,
         scroll_speed = 15,
         entry_delay = 0.3,
@@ -341,15 +406,8 @@ function createSpriteListExample(player_id)
     end
 end
 
--- Command to manually create sprite list
-Net:on("create_sprite_list", function(event)
-    createSpriteListExample(event.player_id)
-end)
-
--- Command to create a different sprite list configuration
-Net:on("create_sprite_grid", function(event)
-    local player_id = event.player_id
-    
+-- Sprite grid handler
+function M:handleCreateSpriteGrid(player_id)
     -- Remove existing sprite list
     Displayer.ScrollingSprite.removeList(player_id, "chat_sprite_list")
     
@@ -372,7 +430,7 @@ Net:on("create_sprite_grid", function(event)
         })
     end
     
-    local success = Displayer.ScrollingSprite.createList(player_id, "chat_grid", 150, 50, 100, 120, {
+    local success = Displayer.ScrollingSprite.createList("chat_grid", player_id, 150, 50, 100, 120, {
         sprites = chat_sprites,
         scroll_speed = 10,
         entry_delay = 0.5,
@@ -394,30 +452,29 @@ Net:on("create_sprite_grid", function(event)
             "2x2 sprite grid created!", 
             10, 190, 80, 25, "THICK", 0.7, 100, nil, 30)
     end
-end)
+end
 
--- Update the reset command
-Net:on("reset", function(event)
-    local player_id = event.player_id
-    if player_data and player_data[player_id] then
-        player_data[player_id].mission_countdown_value = 60
-        player_data[player_id].countdown_running = true
+-- Reset handler
+function M:handleReset(player_id)
+    if self.player_data and self.player_data[player_id] then
+        self.player_data[player_id].mission_countdown_value = 60
+        self.player_data[player_id].countdown_running = true
         Displayer.TimerDisplay.updatePlayerCountdownDisplay(player_id, "mission_countdown", 60)
         
         Displayer.Text.createTextBox(player_id, "reset_msg", "Countdown reset to 60 seconds!", 
             150, 60, 80, 30, "THICK", 0.8, 100, nil, 40)
     end
-end)
+end
 
-Net:on("add_text", function(event)
-    local player_id = event.player_id
-    local text = event.text or "This is a test message!"
-    Displayer.Text.createTextBox(player_id, "custom_text", text, 
+-- Add text handler
+function M:handleAddText(player_id, text)
+    local display_text = text or "This is a test message!"
+    Displayer.Text.createTextBox(player_id, "custom_text", display_text, 
         150, 160, 80, 30, "THICK", 0.8, 100, nil, 35)
-end)
+end
 
-Net:on("clear_all", function(event)
-    local player_id = event.player_id
+-- Clear all handler
+function M:handleClearAll(player_id)
     -- Remove all displays
     Displayer.ScrollingText.removeList(player_id, "fullscreen_display")
     Displayer.ScrollingSprite.removeList(player_id, "chat_sprite_list")
@@ -427,10 +484,12 @@ Net:on("clear_all", function(event)
     
     Displayer.Text.createTextBox(player_id, "cleared", "All displays cleared!", 
         150, 180, 80, 30, "THICK", 0.8, 100, nil, 40)
-end)
+end
 
-print("Enhanced Displayer example with sprite list support loaded and ready!")
-print("Use 'create_sprite_list' command to test sprite list")
-print("Use 'create_sprite_grid' command to test 2x2 grid")
-print("Use 'clear_all' command to remove all displays")
-print("Use 'reset' command to reset the mission countdown")
+-- Utility function to check if initialized
+function M:isInitialized()
+    return self.initialized
+end
+
+-- Return the module
+return M

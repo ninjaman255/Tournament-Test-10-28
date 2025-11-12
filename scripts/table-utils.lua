@@ -43,6 +43,26 @@ function TableUtils.deepCopy(obj, ignoreKeys, seen)
     return res
 end
 
+-- Find item in table by key/value
+function TableUtils.find(t, key, value)
+    for i,v in ipairs(t) do
+        if v[key] == value then
+            return v
+        end
+    end
+    return nil
+end
+
+-- Remove item by key/value
+function TableUtils.remove(t, key, value)
+    for i=#t,1,-1 do
+        if t[i][key] == value then
+            table.remove(t, i)
+        end
+    end
+end
+
+
 function TableUtils.GetAllTiledObjOfXType(area_id, type)
     local objects = Net.list_objects(area_id)
     local results = {}
@@ -146,16 +166,14 @@ function TableUtils.shallow_copy(original)
   return copy
 end
 
-function TableUtils.shuffle(tbl)
-    local shuffled = {}
-    for i = 1, #tbl do
-        shuffled[i] = tbl[i]
-    end
-    for i = #shuffled, 2, -1 do
+-- Shuffle a table in-place
+function TableUtils.shuffle(t)
+    local n = #t
+    for i = n, 2, -1 do
         local j = math.random(i)
-        shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+        t[i], t[j] = t[j], t[i]
     end
-    return shuffled
+    return t
 end
 
 return TableUtils
