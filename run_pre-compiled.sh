@@ -1,1 +1,0 @@
-./net_battle_server -p 9999
