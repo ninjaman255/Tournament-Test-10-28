@@ -176,7 +176,7 @@ local function add_participant_mugshot(player_id, mugshot_id, mug_texture_path, 
     games.add_ui_element("MUG_FRAME_" .. mugshot_id, player_id,
         "/server/assets/tourney/tourney-board-elements/mini-mug-frame.png", "/server/assets/tourney/tourney-board-elements/mini-mug-frame.anim", "ACTIVE", x, y, z_pos + 1)  -- Frame above mugshot
     games.add_ui_element("MUG_" .. mugshot_id, player_id, mug_texture_path,
-        default_mug_anim, "UI", x, y, z_pos, .50, .50)
+        default_mug_anim, "UI", x, y, z_pos, 1, 1)
 end
 
 -- Enhanced function to remove specific participant mugshot
@@ -512,18 +512,19 @@ local function show_tournament_stage(player_id, tournament, stage_type, is_curre
 end
 
 local function show_board_to_all_players(tournament, show_function, stage_type, is_current_state, round_number)
-
-        -- Show board to all real players sequentially, including those who were eliminated
-        for _, participant in ipairs(tournament.participants) do
-            if not string.find(participant.player_id, ".zip") and Net.is_player(participant.player_id) then
-                if show_function == show_tournament_results_with_animation then
-                    show_function(participant.player_id, tournament, round_number)
-                else
-                    show_function(participant.player_id, tournament, stage_type, is_current_state)
-                end
-            end
+  return async(function()
+    for _, participant in ipairs(tournament.participants) do
+      if not string.find(participant.player_id, ".zip") and Net.is_player(participant.player_id) then
+        if show_function == show_tournament_results_with_animation then
+          await(show_function(participant.player_id, tournament, round_number))
+        else
+          await(show_function(participant.player_id, tournament, stage_type, is_current_state))
         end
+      end
+    end
+  end)
 end
+
 
 -- FIXED: Enhanced battle starter with proper NPC predetermined result handling
 local function start_battle(player1_id, player2_id, tournament_id, match_index)
@@ -660,39 +661,33 @@ local function start_battle(player1_id, player2_id, tournament_id, match_index)
     end)
 end
 
--- NEW: Function to start all battles without waiting for completion
+-- NPC-ONLY: start background NPC-vs-NPC battles; NEVER auto-start player battles
 local function start_all_battles(tournament_id)
     return async(function()
         local tournament = TournamentState.get_tournament(tournament_id)
         if not tournament then return end
-        
-        -- Start all battles - they will be handled by the battle_results event
+
+        -- Only start NPC vs NPC battles automatically.
+        -- Player-involved battles must come from the confirmation flow.
         for i, match in ipairs(tournament.matches) do
-            local player1_id = match.player1.player_id
-            local player2_id = match.player2.player_id
-            local is_npc_battle = string.find(player1_id, ".zip") and string.find(player2_id, ".zip")
-            
-            if not is_npc_battle then
-                -- Close any open text boxes for human players before battle
-                if not string.find(player1_id, ".zip") then
-                    Net.close_bbs(player1_id)
+            if not match.completed then
+                local p1 = match.player1.player_id
+                local p2 = match.player2.player_id
+
+                local is_npc_battle = string.find(p1, ".zip") and string.find(p2, ".zip")
+
+                if is_npc_battle then
+                    print("[tourney] Auto-starting NPC battle: " .. p1 .. " vs " .. p2)
+                    await(start_battle(p1, p2, tournament_id, i))
+                    await(Async.sleep(0.2))
                 end
-                if not string.find(player2_id, ".zip") then
-                    Net.close_bbs(player2_id)
-                end
-                
-                -- Start the battle - results will be handled by Net:on("battle_results")
-                print("[tourney] Starting player battle: " .. player1_id .. " vs " .. player2_id)
-                start_battle(player1_id, player2_id, tournament_id, i)
-                
-                -- Small delay to prevent overwhelming the server
-                await(Async.sleep(0.5))
             end
         end
-        
-        print("[tourney] All battles started for round " .. tournament.current_round)
+
+        print("[tourney] NPC auto-battles processed for round " .. tournament.current_round)
     end)
 end
+
 
 -- NEW: Enhanced battle waiting function that never forces player battles
 local function wait_for_all_battles_complete(tournament_id)
@@ -895,38 +890,53 @@ local function run_tournament_battles(tournament_id)
         -- FIRST: Show current state of the board before any battles to all players
         if tournament.current_round == 1 then
             print("[tourney] Showing initial tournament board to all players")
-            show_board_to_all_players(tournament, show_tournament_stage, "initial", false)
-            await(Async.sleep(2.0)) -- Additional pause after all boards are shown
+        await(show_board_to_all_players(tournament, show_tournament_stage, "initial", false))
+        -- optional tiny padding if you still want it
+        -- await(Async.sleep(0.2))
+
         else
-            -- For subsequent rounds, show the CURRENT STATE (positions from previous round)
             print("[tourney] Showing CURRENT STATE before round " .. tournament.current_round .. " battles to all players")
-            show_board_to_all_players(tournament, show_tournament_stage, "current_state", true)
-            await(Async.sleep(2.0)) -- Additional pause after all boards are shown
+            await(show_board_to_all_players(tournament, show_tournament_stage, "current_state", true))
+            -- (delete the old 2.0 sleep; the board function already has its own 12.5s show time)
         end
         
-        -- FIXED: Process NPC battles sequentially with proper delays
-        local npc_battles_started = 0
-        for i, match in ipairs(tournament.matches) do
-            local player1_id = match.player1.player_id
-            local player2_id = match.player2.player_id
-            local is_npc_battle = string.find(player1_id, ".zip") and string.find(player2_id, ".zip")
-            
-            if is_npc_battle then
-                npc_battles_started = npc_battles_started + 1
-                print(string.format("[tourney] Starting NPC vs NPC battle %d/%d: %s vs %s", 
-                      npc_battles_started, #tournament.matches, player1_id, player2_id))
-                await(start_battle(player1_id, player2_id, tournament_id, i))
-                -- FIXED: Add delay between NPC battles to ensure proper sequencing
-                if npc_battles_started < #tournament.matches then
-                    await(Async.sleep(1.0))
-                end
-            end
-        end
-        
-        -- Then, start all player battles - results will be handled by Net:on("battle_results")
-        if npc_battles_started < #tournament.matches then
-            await(start_all_battles(tournament_id))
-        end
+-- Start the first match that includes a real player ASAP (so battle starts right after the board)
+local started_player_match = false
+for i, match in ipairs(tournament.matches) do
+    local p1 = match.player1.player_id
+    local p2 = match.player2.player_id
+    local p1_is_human = not string.find(p1, ".zip")
+    local p2_is_human = not string.find(p2, ".zip")
+
+    if not match.completed and (p1_is_human or p2_is_human) then
+        print(string.format("[tourney] Starting PRIORITY player battle for match %d: %s vs %s", i, p1, p2))
+        started_player_match = true
+
+        -- Important: actually wait for the encounter to begin/resolve, depending on how your logic expects results
+        -- If you want it to immediately transition, you can NOT await here, but awaiting is usually safer.
+        await(start_battle(p1, p2, tournament_id, i))
+        break
+    end
+end
+
+-- Now resolve NPC-vs-NPC matches (these are instant anyway)
+local npc_battles_started = 0
+for i, match in ipairs(tournament.matches) do
+    local p1 = match.player1.player_id
+    local p2 = match.player2.player_id
+    local is_npc_battle = string.find(p1, ".zip") and string.find(p2, ".zip")
+
+    if not match.completed and is_npc_battle then
+        npc_battles_started = npc_battles_started + 1
+        print(string.format("[tourney] Starting NPC vs NPC battle %d: %s vs %s", npc_battles_started, p1, p2))
+        await(start_battle(p1, p2, tournament_id, i))
+        await(Async.sleep(0.2)) -- tiny spacing; 1.0 is overkill for instant NPC results
+    end
+end
+
+-- If there are additional human battles (multiplayer), start the rest after the first
+-- (single-player usually has only one)
+await(start_all_battles(tournament_id))
         
         print("[tourney] All battles started for round " .. tournament.current_round)
         
