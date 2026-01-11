@@ -1,217 +1,162 @@
 --[[
 * ---------------------------------------------------------- *
-           Net Games (framework) - Version 0.07
-	     https://github.com/indianajson/net-games/   
+           Net Games (framework) - Combined Edition
+           (net-games + tournament compatibility)
 * ---------------------------------------------------------- *
+
+Goals:
+- Preserve the existing net-games API used by your scripts.
+- Provide the lifecycle functions expected by tournament scripts.
+- Keep Displayer optional (do not hard-crash if Displayer is missing).
+- Fix known bugs/landmines from the tourney framework code path.
+- Avoid Net sprite "rebind" issues by default (no reuse-by-texture unless enabled).
 
 ]]--
 
-local Displayer = require("scripts/net-games/displayer/displayer") --module by D3str0y3d to handle text, timers, countdowns using v2.1
+-- ============================================================
+-- Optional Displayer init (tournament uses Displayer heavily, but don't hard crash)
+-- ============================================================
+local Displayer_ok, Displayer = pcall(require, "scripts/net-games/displayer/displayer")
+local DISPLAYER_READY = false
 
-if not Displayer:init() or not Displayer:isValid() then
-    print("Failed to initialize Displayer API")
-    return false
+if Displayer_ok and Displayer and Displayer.init and Displayer.isValid then
+  local ok = false
+  pcall(function()
+    ok = (Displayer:init() == true) and (Displayer:isValid() == true)
+  end)
+  DISPLAYER_READY = ok
 end
 
-local frame = {} --holds the framework functions and returns them to whatever script is calling them
-local last_position_cache = {} --legacy cache that only tracks player's area now
-local button_states = {} --cache of latest button states from player
-local tracking_state = {} --tracks if a player's button state has remained 2 for more than X seconds
-local cosmetic_cache = {} --tracks cosmetics for player
-local cursor_cache = {} --tracks cursors currently spawned for player
-local avatar_cache = {} --tracks the original player avatar for each player
-local ui_cache = {} --tracks ui elements currently spawned for player
-local map_elements = {} --tracks map elements currently spawned for player
-local ui_update = {} --contains data on any actively sliding/moving UI elements
-local online_players = {} --contains a table of all online players for excluding elements
-local cursor_tick = 0 --keeps cursor from being moved too quickly
-
--- HELPER FUNCTIONS
--- A variety of simple functions used for repetitive calculations and adjustments
-
---purpose: helper function for fixOffsets
-local function round_fraction(value, denominator)
-    local int_part = math.floor(value)
-    local decimal = value - int_part
-    local n = math.floor(decimal * denominator + 0.5)
-    return int_part, n / denominator
+if not DISPLAYER_READY then
+  print("[net-games][framework] Displayer not available/valid; text/timers will be no-ops.")
 end
 
---purpose: checks if a string follows a valid X,Y,Z pattern
-local function validateCords(str)
-    -- Remove all spaces from the string
-    str = str:gsub("%s+", "")
-    -- Check for exactly two commas
-    local commaCount = 0
-    for i = 1, #str do
-        if str:sub(i, i) == "," then
-            commaCount = commaCount + 1
-        end
-    end
-    if commaCount ~= 2 then
-        return false
-    end
-    -- Check we have exactly 3 parts
-    local parts = {}
-    for part in str:gmatch("([^,]+)") do
-        table.insert(parts, part)
-    end
-    if #parts ~= 3 then
-        return false
-    end
-    -- Check each part is a whole number with no decimals
-    for _, part in ipairs(parts) do
-        if not part:match("^%d+$") then
-            return false
-        end
-    end
-    -- Check the format is exactly "number,number,number" (no extra characters)
-    if not str:match("^%d+,%d+,%d+$") then
-        return false
-    end
+-- ============================================================
+-- Framework state / caches
+-- ============================================================
+local frame = {}
 
-    return true
-end
+local last_position_cache = {} -- tracks player's last known area
+local button_states = {}       -- latest button states
+local tracking_state = {}      -- hold-to-repeat tracker for state=2 buttons
+local cosmetic_cache = {}      -- cosmetics per player
+local cursor_cache = {}        -- cursor config per player
+local avatar_cache = {}        -- reserved (used by some forks)
+local ui_cache = {}            -- ui elements per player
+local map_elements = {}        -- map elements per player
+local ui_update = {}           -- reserved for future sliding UI
+local online_players = {}      -- list of online players (for exclusions)
 
---purpose: converts Net.get_bot_direction() from name to initials used by animations
-local function simple_direction(direction) 
-    if direction == "Up Left" then
-        return "UL"
-    elseif direction == "Up Right" then
-        return "UR"
-    elseif direction == "Down Left" then
-        return "DL"
-    elseif direction == "Down Right" then
-        return "DR"
-    elseif direction == "Up" then
-        return "U"
-    elseif direction == "Down" then
-        return "D"
-    elseif direction == "Left" then
-        return "L"
-    elseif direction == "Right" then
-        return "R"
-    end
-end 
+-- Default: do NOT reuse sprite allocations by texture.
+-- Net.player_draw_sprite can be "sticky" across sprite_id reuse in some forks.
+-- If you really want old behavior, set to true.
+local REUSE_SPRITES_BY_TEXTURE = false
 
---purpose: converts h/v offsets to x/y offsets for UIs
-local function convertOffsets(horizontalOffset,verticalOffset,Z)
-    local xoffset = ((2 * -verticalOffset + horizontalOffset) / 64)+(Z/2)
-    local yoffset = ((2 * -verticalOffset - horizontalOffset) / 64)+(Z/2)
-    return xoffset,yoffset
-end 
-
---purpose: adjusts offsets for UIs so they do not jitter
-local function fixOffsets(a, b)
-    -- Step 1: Round both decimals to nearest fraction of 32
-    local a_int, a_dec = round_fraction(a, 32)
-    local b_int, b_dec = round_fraction(b, 32)
-
-    -- Step 2: Adjust the difference between decimal parts
-    local diff = math.abs(a_dec - b_dec)
-    if diff < 1 then
-        -- Round diff to nearest fraction of 16
-        local diff_adj = math.floor(diff * 16 + 0.5) / 16
-        -- Set b_dec so the difference is now diff_adj, preserving the original ordering
-        if a_dec >= b_dec then
-            b_dec = a_dec - diff_adj
-        else
-            b_dec = a_dec + diff_adj
-        end
-        -- Clamp b_dec to [0, 1)
-        if b_dec < 0 then b_dec = 0 end
-        if b_dec >= 1 then b_dec = 1 - (1/32) end -- avoid rolling over
-    end
-
-    local a_final = a_int + a_dec
-    local b_final = b_int + b_dec
-    return a_final, b_final
-end
-
-
---purpose: Shorthand for async
+-- ============================================================
+-- Async helpers
+-- ============================================================
 local function async(p)
-    local co = coroutine.create(p)
-    return Async.promisify(co)
+  local co = coroutine.create(p)
+  return Async.promisify(co)
 end
 
---purpose: Shorthand for await
 local function await(v) return Async.await(v) end
 
-local function table_has_value (tab, val)
-    for index, value in ipairs(tab) do
-        if value == val then
-            return true
-        end
-    end
-
-    return false
+-- ============================================================
+-- Math helpers (UI offset jitter fixes)
+-- ============================================================
+local function round_fraction(value, denominator)
+  local int_part = math.floor(value)
+  local decimal = value - int_part
+  local n = math.floor(decimal * denominator + 0.5)
+  return int_part, n / denominator
 end
 
---purpose: excludes bot for everyone except provided player_id
-local function exclude_except_for(player_id,bot_id)
-    for i,p_id in next,online_players do 
-        if p_id ~= player_id then
-            Net.exclude_actor_for_player(p_id, bot_id)
-        end 
-    end 
-end 
+local function convertOffsets(horizontalOffset, verticalOffset, Z)
+  local xoffset = ((2 * -verticalOffset + horizontalOffset) / 64) + (Z / 2)
+  local yoffset = ((2 * -verticalOffset - horizontalOffset) / 64) + (Z / 2)
+  return xoffset, yoffset
+end
 
--- ASSET PROVISION
--- Some of these assets don't load properly unless provided to player when they join
-Net:on("player_join", function(event)
-    Net.provide_asset_for_player(event.player_id, "/server/assets/net-games/fonts_compressed.png")
-    Net.provide_asset_for_player(event.player_id, "/server/assets/net-games/fonts_wide.animation")
-    Net.provide_asset_for_player(event.player_id, "/server/assets/net-games/fonts_gradient.animation")
-    Net.provide_asset_for_player(event.player_id, "/server/assets/net-games/fonts_thick.animation")
-    Net.provide_asset_for_player(event.player_id, "/server/assets/net-games/fonts_battle.animation")
-    Net.provide_asset_for_player(event.player_id, "/server/assets/net-games/fonts_thin.animation")
-    Net.provide_asset_for_player(event.player_id, "/server/assets/net-games/fonts_tiny.animation")
-    Net.provide_asset_for_player(event.player_id, "/server/assets/net-games/fonts_compressed.animation")
-    Net.provide_asset_for_player(event.player_id, "/server/assets/net-games/fonts_dark_compressed.png")
+local function fixOffsets(a, b)
+  local a_int, a_dec = round_fraction(a, 32)
+  local b_int, b_dec = round_fraction(b, 32)
 
-end)
+  local diff = math.abs(a_dec - b_dec)
+  if diff < 1 then
+    local diff_adj = math.floor(diff * 16 + 0.5) / 16
+    if a_dec >= b_dec then
+      b_dec = a_dec - diff_adj
+    else
+      b_dec = a_dec + diff_adj
+    end
+    if b_dec < 0 then b_dec = 0 end
+    if b_dec >= 1 then b_dec = 1 - (1 / 32) end
+  end
 
--- Try a handful of possible EO/Net APIs to move a player without hard-crashing
+  return a_int + a_dec, b_int + b_dec
+end
+
+local function table_has_value(tab, val)
+  for _, value in ipairs(tab) do
+    if value == val then return true end
+  end
+  return false
+end
+
+local function exclude_except_for(player_id, bot_id)
+  for _, p_id in next, online_players do
+    if p_id ~= player_id then
+      Net.exclude_actor_for_player(p_id, bot_id)
+    end
+  end
+end
+
+-- ============================================================
+-- Asset provision (fonts etc.)
+-- ============================================================
+local function provide_framework_assets(player_id)
+  -- Some assets won't load reliably unless provided on join.
+  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts_compressed.png") end)
+  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts_dark_compressed.png") end)
+
+  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts_wide.animation") end)
+  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts_gradient.animation") end)
+  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts_thick.animation") end)
+  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts_battle.animation") end)
+  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts_thin.animation") end)
+  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts_tiny.animation") end)
+  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts_compressed.animation") end)
+end
+
+-- ============================================================
+-- Cross-fork movement/animation helpers (used by Simon Says / tournament fades)
+-- ============================================================
 local function try_move_player(player_id, area_id, x, y, z)
-  -- 1) transfer_player(player_id, area_id, x, y, z)
   local ok = pcall(function()
-    if Net.transfer_player then
-      Net.transfer_player(player_id, area_id, x, y, z)
-    end
+    if Net.transfer_player then Net.transfer_player(player_id, area_id, x, y, z) end
   end)
   if ok and Net.transfer_player then return true end
 
-  -- 2) transfer_player(player_id, area_id, warp_in, x, y, z) (some forks use warp_in bool)
   ok = pcall(function()
-    if Net.transfer_player then
-      Net.transfer_player(player_id, area_id, false, x, y, z)
-    end
+    if Net.transfer_player then Net.transfer_player(player_id, area_id, false, x, y, z) end
   end)
   if ok and Net.transfer_player then return true end
 
-  -- 3) move_player(player_id, x, y, z)
   ok = pcall(function()
-    if Net.move_player then
-      Net.move_player(player_id, x, y, z)
-    end
+    if Net.move_player then Net.move_player(player_id, x, y, z) end
   end)
   if ok and Net.move_player then return true end
 
-  -- 4) set_player_position(player_id, x, y, z)
   ok = pcall(function()
-    if Net.set_player_position then
-      Net.set_player_position(player_id, x, y, z)
-    end
+    if Net.set_player_position then Net.set_player_position(player_id, x, y, z) end
   end)
   if ok and Net.set_player_position then return true end
 
   return false
 end
 
--- Try common APIs to animate the player
 local function try_animate_player(player_id, anim_state)
-  -- 1) animate_player_properties(player_id, keyframes)
   local ok = pcall(function()
     if Net.animate_player_properties then
       local keyframes = {
@@ -222,28 +167,22 @@ local function try_animate_player(player_id, anim_state)
   end)
   if ok and Net.animate_player_properties then return true end
 
-  -- 2) set_player_animation(player_id, anim_state)
   ok = pcall(function()
-    if Net.set_player_animation then
-      Net.set_player_animation(player_id, anim_state)
-    end
+    if Net.set_player_animation then Net.set_player_animation(player_id, anim_state) end
   end)
   if ok and Net.set_player_animation then return true end
 
   return false
 end
 
-
--- Move the frozen player (Simon Says uses this after fading to black)
 function frame.move_frozen_player(player_id, x, y, z)
   return async(function()
     local area_id = Net.get_player_area(player_id)
     try_move_player(player_id, area_id, x, y, z)
-    await(Async.sleep(0)) -- yields nicely for callers doing await(...)
+    await(Async.sleep(0))
   end)
 end
 
--- Animate the frozen player
 function frame.animate_frozen_player(player_id, anim_state)
   return async(function()
     try_animate_player(player_id, anim_state)
@@ -251,707 +190,753 @@ function frame.animate_frozen_player(player_id, anim_state)
   end)
 end
 
-
-
--- PLAYER FUNCTIONS
--- Functons used to interact with the player and the framework 
-
---purpose: show a texture as a cosmetic on a player's avatar
-function frame.set_cosmetic(cosmetic_id,player_id,texture,animation,state,x,y,visible,player_xoffset,player_yoffset)
-    return async(function ()
-    --safety checks
-    if cosmetic_id == nil or animation == nil or state == nil or player_id == nil or texture == nil or x == nil or y == nil then
-        print("[games] One or more required arguments is missing for set_cosmetic()")
-        return
+-- ============================================================
+-- Cosmetics
+-- ============================================================
+function frame.set_cosmetic(cosmetic_id, player_id, texture, animation, state, x, y, visible, player_xoffset, player_yoffset)
+  return async(function()
+    if cosmetic_id == nil or player_id == nil or texture == nil or animation == nil or state == nil or x == nil or y == nil then
+      print("[net-games][framework] set_cosmetic(): missing required arguments")
+      return false
     end
-    local visibility = true
-    if visible == false then
-        visibility = false
-    end 
-    if not cosmetic_cache[player_id] then 
-        cosmetic_cache[player_id] = {}
-    end
+
+    local visibility = (visible ~= false)
+
+    cosmetic_cache[player_id] = cosmetic_cache[player_id] or {}
     if cosmetic_cache[player_id][cosmetic_id] then
-        print("[games] Player already has cosmetic named '"..cosmetic_id.."'.")
-        return 
-    end 
-    
-    --draw sprite on player
-    Net.provide_asset_for_player(player_id, texture)
-    Net.provide_asset_for_player(player_id, animation)
-    Net.player_alloc_sprite(player_id, cosmetic_id, {texture_path = texture, anim_path = animation, anim_state = state})
-    local p_xoffset = 0
-    local p_yoffset = 0
+      print("[net-games][framework] set_cosmetic(): player already has cosmetic '" .. cosmetic_id .. "'")
+      return false
+    end
 
-    if player_xoffset then 
-        p_xoffset = player_xoffset
-    end 
-    if player_yoffset then 
-        p_yoffset = player_yoffset
-    end 
+    local p_xoffset = player_xoffset or 0
+    local p_yoffset = player_yoffset or 0
 
-    Net.player_draw_sprite(player_id, cosmetic_id,
-    {
-        id = cosmetic_id .. "_obj",
-        x = (x+120+p_xoffset)*2, 
-        y = (y+80+p_yoffset)*2,
-        sx = 2,
-        sy = 2,
-        anim_state = state
+    pcall(function() Net.provide_asset_for_player(player_id, texture) end)
+    pcall(function() Net.provide_asset_for_player(player_id, animation) end)
+
+    Net.player_alloc_sprite(player_id, cosmetic_id, { texture_path = texture, anim_path = animation, anim_state = state })
+    Net.player_draw_sprite(player_id, cosmetic_id, {
+      id = cosmetic_id .. "_obj",
+      x = (x + 120 + p_xoffset) * 2,
+      y = (y + 80 + p_yoffset) * 2,
+      sx = 2,
+      sy = 2,
+      anim_state = state
     })
 
-    --spawn bot on player 
-    if not last_position_cache[player_id] then
-        last_position_cache[player_id] = {}
-    end 
-local area_id =
-  last_position_cache[player_id]["area"]
-  or Net.get_player_area(player_id)
+    last_position_cache[player_id] = last_position_cache[player_id] or {}
+    local area_id = last_position_cache[player_id].area or Net.get_player_area(player_id)
 
     local position = Net.get_player_position(player_id)
-    local xoffset,yoffset = convertOffsets(x*-1,y*-1,position.z+3)
-    local xoffset,yoffset = fixOffsets(xoffset,yoffset)
+    local xoffset, yoffset = convertOffsets(x * -1, y * -1, position.z + 3)
+    xoffset, yoffset = fixOffsets(xoffset, yoffset)
 
-    --add cosmetic to cache 
-    cosmetic_cache[player_id][cosmetic_id] = {id=cosmetic_id,texture=texture,x=xoffset,y=yoffset,visibility=visibility,animation=animation,state=state,spritex=(x+120+p_xoffset)*2,spritey=(y+80+p_yoffset)*2}
-
-    Net.create_bot(cosmetic_id.."_"..player_id, { area_id=area_id, warp_in=false, texture_path=texture, animation_path=animation, animation=state, x=position.x+xoffset, y=position.y+yoffset, z=position.z+3, solid=false})
-    --hide bot from player (since we show it the cosmetic with a sprite)
-    Net.exclude_actor_for_player(player_id,cosmetic_id.."_"..player_id)
-
-    end)
-end 
-
---purpose: remove a player's existing cosmetic
-function frame.remove_cosmetic(cosmetic_id,player_id)
-    if not cosmetic_cache[player_id] then 
-        print("[games] Player has no cosmetics.")
-        return
-    end
-    if not cosmetic_cache[player_id][cosmetic_id] then
-        print("[games] Player has no cosmetic '"..cosmetic_id.."'.")
-        return
-    end 
-
-    Net.remove_bot(cosmetic_id.."_"..player_id,false)
-    Net.player_erase_sprite(player_id,cosmetic_id.."_obj")
-    cosmetic_cache[player_id][cosmetic_id] = nil
-
-end
-
--- MAP FUNCTIONS
--- Functions to add, animate, and remove objects based on map position (for mini-game elements on map, especially those visible to other players)
-
-function frame.add_map_element(name,player_id,texture,animation,animation_state,X,Y,Z,exclude)
-    
-    --spawn map object
-    
-local area_id =
-  (last_position_cache[player_id] and last_position_cache[player_id]["area"])
-  or Net.get_player_area(player_id)
-
-    Net.create_bot(player_id.."-map-"..name, { area_id=area_id, warp_in=false, texture_path=texture, animation_path=animation, animation=animation_state,x=X, y=Y, z=Z, solid=false})
-
-    if exclude == true then
-        exclude_except_for(player_id,player_id.."-map-"..name)
-    end 
-    
-    Net.animate_bot(player_id.."-map-"..name, animation_state, true)
-
-    --includes map element in map_elements cache for player so we can track updates and removal  
-    if map_elements[player_id] == nil then
-        map_elements[player_id] = {}
-    end 
-    map_elements[player_id][name] = {}
-    map_elements[player_id][name]["name"] = name
-    map_elements[player_id][name]["state"] = animation_state
-    map_elements[player_id][name]["id"] = player_id.."-ui-"..name    
-end
-
-function frame.change_map_element(name,player_id,animation_state,loop)
-    if Net.is_bot(player_id.."-map-"..name) then
-        Net.animate_bot(player_id.."-map-"..name, animation_state,loop)
-
-    else
-        print("[games] Come on, "..name.." isn't a map element for that player!")
-    end 
-end
-
-function frame.move_map_element(name,player_id,X,Y,Z)
-local area_id =
-  (last_position_cache[player_id] and last_position_cache[player_id]["area"])
-  or Net.get_player_area(player_id)
-
-Net.transfer_bot(player_id.."-map-"..name, area_id, false, X, Y, Z)
-
-end
-
---purpose: removes UI element from screen
-function frame.remove_map_element(name,player_id)
-    if Net.is_bot(player_id.."-map-"..name) then 
-        map_elements[player_id][name] = nil
-        Net.remove_bot(player_id.."-map-"..name,false)
-    end
-end
-
--- UI FUNCTIONS
--- Functions to add, animate, and remove sprites based on camera's view (not map position)
-
---purpose: places a UI element on screen... that's it. Yes, it's complicated. No, I won't explain it. Blame Jams!
-function frame.add_ui_element(sprite_id,player_id,texture_path,animation_path,animation_state,X,Y,Z,ScaleX,ScaleY)
-
-    local scaleX = 2.0
-    local scaleY = 2.0
-    if ScaleX ~= nil then
-        if ScaleX >= 0.0 then
-            scaleX = ScaleX
-        end
-    end
-      if ScaleY ~= nil then
-        if ScaleY >= 0.0 then
-            scaleY = ScaleY
-        end
-    end
-    if not animation_path then animation_path = "" end
-    if not animation_state then animation_state = "" end
-
-    if ui_cache[player_id] == nil then
-        ui_cache[player_id] = {}
-    end 
-    --check if sprite already allocated
-    local new_sprite_id = sprite_id
-    local already_allocated = false
-    for sprite_id, sprite_data in next, ui_cache[player_id] do
-        if sprite_data["texture_path"] == texture_path then 
-            already_allocated = true
-            new_sprite_id = sprite_data["sprite_id"]
-            --print("Using existing sprite.")
-        end
-    end 
-    
-    if already_allocated == false then 
-        --print("Creating new sprite.")
-        if animation_path ~= "" then
-            Net.provide_asset_for_player(player_id, animation_path)
-        end
-        Net.provide_asset_for_player(player_id, texture_path)
-        Net.player_alloc_sprite(player_id, new_sprite_id, {texture_path = texture_path, anim_path = animation_path, anim_state = animation_state})
-    end
-    Net.player_draw_sprite(player_id, new_sprite_id,
-        {
-            id = sprite_id .. "_obj",
-            x = X*2, 
-            y = Y*2, 
-            sx = scaleX,
-            sy = scaleY,
-            anim_state = animation_state
-        }
-    )
-
-    if ui_cache[player_id] == nil then
-        ui_cache[player_id] = {}
-    end 
-    --includes UI element in UI cache for player so we can track sprites
-    ui_cache[player_id][sprite_id] = {texture_path=texture_path, sprite_id=sprite_id, x=X,y=Y,z=Z,scaleX=scaleX,scaleY=scaleY,rotation=0,animation_state=animation_state,opacity=255}
-end
-
---purpose: allows you to update any property of a sprite element 
-function frame.update_ui_element(sprite_id,player_id,properties)
-    --write logic to only update elements that need to be updated. 
-    local sprite_data = {id = sprite_id .. "_obj"}
-    if properties["x"] then 
-        sprite_data["x"] = properties["x"]
-        ui_cache[player_id][sprite_id]["x"] = properties["x"]
-    end 
-    if properties["y"] then 
-        sprite_data["y"] = properties["y"]
-        ui_cache[player_id][sprite_id]["y"] = properties["y"]
-    end 
-    if properties["z"] then 
-        sprite_data["z"] = properties["z"]
-        ui_cache[player_id][sprite_id]["z"] = properties["z"]
-    end 
-    if properties["ox"] then 
-        sprite_data["ox"] = properties["ox"]
-        ui_cache[player_id][sprite_id]["ox"] = properties["ox"]
-    end 
-    if properties["oy"] then 
-        sprite_data["oy"] = properties["oy"]
-        ui_cache[player_id][sprite_id]["oy"] = properties["oy"]
-    end 
-    if properties["scale"] then 
-        sprite_data["sx"] = properties["scale"]
-        ui_cache[player_id][sprite_id]["scaleX"] = properties["scale"]
-        sprite_data["sy"] = properties["scale"]
-        ui_cache[player_id][sprite_id]["scaleY"] = properties["scale"]
-    end 
-    if properties["rotation"] then 
-        sprite_data["ro"] = properties["ro"]
-        ui_cache[player_id][sprite_id]["rotation"] = properties["rotation"]
-    end 
-    if properties["opacity"] then 
-        sprite_data["opacity"] = properties["opacity"]
-        ui_cache[player_id][sprite_id]["opacity"] = properties["opacity"]
-    end 
-    if properties["animation_state"] then 
-        sprite_data["anim_state"] = properties["animation_state"]
-        ui_cache[player_id][sprite_id]["animation_state"] = properties["animation_state"]
-    end 
-    Net.player_draw_sprite(player_id, sprite_id,sprite_data)
-end
-
---purpose: change the animation state of existing UI element
-function frame.set_ui_animation(sprite_id,player_id,animation_state)
-    
-    Net.player_draw_sprite(player_id, ui_cache[player_id][sprite_id]["sprite_id"],
-    {
-        id = sprite_id .. "_obj",
-        anim_state = animation_state    
+    cosmetic_cache[player_id][cosmetic_id] = {
+      id = cosmetic_id,
+      texture = texture,
+      x = xoffset,
+      y = yoffset,
+      visibility = visibility,
+      animation = animation,
+      state = state,
+      spritex = (x + 120 + p_xoffset) * 2,
+      spritey = (y + 80 + p_yoffset) * 2
     }
-    )
-end
 
---purpose: move existing UI element
-function frame.move_ui_element(sprite_id,player_id,X,Y,Z)
-    Net.player_draw_sprite(player_id, ui_cache[player_id][sprite_id]["sprite_id"],
-    {
-        id = sprite_id .. "_obj",
-        x = X*2,
-        y = Y*2,
-        z = Z    
-    }
-    )
-end
+    local bot_id = cosmetic_id .. "_" .. player_id
+    Net.create_bot(bot_id, {
+      area_id = area_id,
+      warp_in = false,
+      texture_path = texture,
+      animation_path = animation,
+      animation = state,
+      x = position.x + xoffset,
+      y = position.y + yoffset,
+      z = position.z + 3,
+      solid = false
+    })
 
-function frame.update_ui_position(sprite_id, player_id, X, Y, Z)
-    if ui_cache[player_id] and ui_cache[player_id][sprite_id] then
-        local element = ui_cache[player_id][sprite_id]
-        Net.player_draw_sprite(player_id, element.sprite_id,
-            {
-                id = sprite_id .. "_obj",
-                x = X*2,
-                y = Y*2,
-                z = Z or element.z,
-                sx = element.scaleX,
-                sy = element.scaleY,
-                anim_state = element.animation_state
-            }
-        )
-        -- Update cache
-        element.x = X
-        element.y = Y
-        element.z = Z or element.z
-    end
-end
+    -- Hide bot from owning player (they see the cosmetic via player sprite)
+    Net.exclude_actor_for_player(player_id, bot_id)
 
---purpose: slide an existing UI element across the screen over a specified duration
-function frame.slide_ui_element(sprite_id,player_id,X,Y,duration)
-    print("slide_ui_element() is not yet supported.")
-    --local element = ui_cache[player_id][sprite_id]
-    return 
-    --add move to ui_update table
-end
-
---purpose: make camera pannable freely with arrows but without player following. 
-function frame.detach_camera(player_id)
-    print("detach_camera() is not yet supported.")
-    return 
-end
-
---purpose: removes UI element from screen
-function frame.remove_ui_element(sprite_id,player_id)
-    Net.player_erase_sprite(player_id, sprite_id .. "_obj")
-end
-
--- TEXT FUNCTIONS
-function frame.draw_text(text_id,player_id,text,x,y,z,font,scale)
-    Displayer.Text.drawText(player_id, text_id, text, tonumber(x)*2, tonumber(y)*2, z, font, scale)
-end
-
-function frame.update_text(text_id,player_id,text)
-    Displayer.Text.updateText(player_id, text_id, tostring(text))
-end
-
-function frame.remove_text(text_id,player_id)
-    Displayer.Text.removeText(player_id, text_id)
-end
-
--- ADD MARQUEE TEXT FUNCTION
-function frame.draw_marquee_text(marquee_id, player_id, text, y, font, scale, z_order, speed, backdrop)
-    Displayer.Text.drawMarqueeText(player_id, marquee_id, text, y, font, scale, z_order, speed, backdrop)
-end
-
-function frame.set_marquee_position(player_id, marquee_id, x, y)
-    Displayer.Text.setMarqueePosition(player_id, marquee_id, x, y)
-end
-
-function frame.set_marquee_speed(player_id, marquee_id, speed)
-    Displayer.Text.setMarqueeSpeed(player_id, marquee_id, speed)
-end
-
--- TIMER FUNCTIONS
-
-function frame.spawn_timer(timer_id,player_id,X,Y,duration,loop)
-    loop = loop or false
-    Displayer.Timer.createPlayerTimer(
-        player_id, 
-        timer_id, 
-        duration, 
-        function(_, timer_id, value)
-        end,
-        loop)
-    Displayer.TimerDisplay.createPlayerTimerDisplay(player_id, timer_id, X*2, Y*2, "default")
-end 
-
-function frame.resume_timer(timer_id,player_id)
-    Displayer.Timer.resumePlayerTimer(player_id, timer_id)
-end
-
-function frame.pause_timer(timer_id,player_id)
-    Displayer.Timer.pausePlayerTimer(player_id, timer_id)
-end
-
-function frame.remove_timer(timer_id,player_id)
-    Displayer.Timer.removePlayerTimer(player_id, timer_id)
-end 
-
-function frame.update_timer(timer_id,player_id,duration)
-    Displayer.Timer.updatePlayerTimer(player_id, timer_id, duration)
-end 
-
--- COUNTDOWN FUNCTIONS
-
-function frame.spawn_countdown(countdown_id,player_id,X,Y,duration,loop)
-    loop = loop or false
-    Displayer.Timer.createPlayerCountdown(
-        player_id, 
-        countdown_id, 
-        duration, 
-        function(_, countdown_id, value)
-            if value <= 0 then
-                Net:emit("countdown_ended", {player_id = player_id, countdown_id=countdown_id})
-            end
-        end,
-        loop)
-    Displayer.TimerDisplay.createPlayerCountdownDisplay(player_id, countdown_id, X*2, Y*2, "default")
-end 
-
-function frame.resume_countdown(countdown_id,player_id)
-    Displayer.Timer.resumePlayerCountdown(player_id, countdown_id)
-end
-
-function frame.pause_countdown(countdown_id,player_id)
-    Displayer.Timer.pausePlayerCountdown(player_id, countdown_id)
-end
-
-function frame.remove_countdown(countdown_id,player_id)
-    Displayer.Timer.removePlayerCountdown(player_id, countdown_id)
-end 
-
-function frame.update_countdown(countdown_id,player_id,duration)
-    Displayer.Timer.updatePlayerCountdown(player_id, countdown_id, duration)
-end 
-
--- CURSOR FUNCTIONS
--- Create selectors with customizable arrows or icons and respond to cursor movements in realtime. 
-
---purpose: spawns a cursor that shifts between options based on a table of information provided
-function frame.spawn_cursor(cursor_id,player_id,options) 
-    return async(function ()
-
-    Net.lock_player_input(player_id)
-    --setup variables from provided options
-    if cursor_cache[player_id] ~= nil then if next(cursor_cache[player_id]) ~= nil then if cursor_cache[player_id] ~= {} then
-        print("[games] You already got a cursor for that user, remove it first.") 
-        return 
-    end end end 
-    --add cursor to cache 
-    cursor_cache[player_id] = {}
-    cursor_cache[player_id] = options
-    cursor_cache[player_id]["name"] = cursor_id
-    --create bot and set initial cursor arrow in position cursor_cache[player_id]["selections"][1]
-    local selection = cursor_cache[player_id]["selections"][1]
-
-    if animation_path ~= "" then
-        Net.provide_asset_for_player(player_id, options["animation"])
-    end
-    Net.provide_asset_for_player(player_id, options["texture"])
-    Net.player_alloc_sprite(player_id, cursor_id, {texture_path = options["texture"], anim_path = options["animation"], anim_state = selection["state"]})
-    Net.player_draw_sprite(player_id, cursor_id,
-        {
-            id = cursor_id .. "_obj",
-            x = selection["x"]*2, 
-            y = selection["y"]*2, 
-            z = selection["z"],
-            sx=2,
-            sy=2,
-            anim_state = selection["state"]
-        }
-    )
-
-    if cursor_cache[player_id]["sprites"] == nil then
-        cursor_cache[player_id]["sprites"] = {}
-    end 
-
-    --this tracks the index of the current selection
-    cursor_cache[player_id]["current"] = 1
-    --tracks timed lockout to avoid multiple accidental button presses 
-    cursor_cache[player_id]["locked"] = false
-
-end)
-end
-
---purpose: removes a cursor and clears cursor_cache for player
-function frame.remove_cursor(cursor_id,player_id)
-    cursor_cache[player_id] = nil
-    Net.player_erase_sprite(player_id, cursor_id .. "_obj")
-end
-
---purpose: handles cursor movement logic
---usage: for framework only, use the Game:on("cursor_hover") to respond to cursor movements.
-Net:on("cursor_move", function(event)
-    local last_selection = cursor_cache[event.player_id]["current"]
-    if event.button == "Move Left" or event.button == "Shoulder L" or event.button == "Move Up" then
-        if last_selection == 1 then
-            cursor_cache[event.player_id]["current"] = #cursor_cache[event.player_id]["selections"]
-        else 
-            cursor_cache[event.player_id]["current"] = last_selection - 1
-        end 
-    elseif event.button == "Move Right" or event.button == "Move Down" or event.button == "Shoulder R" then
-        if last_selection == #cursor_cache[event.player_id]["selections"] then
-            cursor_cache[event.player_id]["current"] = 1
-        else 
-            cursor_cache[event.player_id]["current"] = last_selection + 1
-        end 
-    end 
-
-    local selection = cursor_cache[event.player_id]["selections"][cursor_cache[event.player_id]["current"]]
-
-    Net.player_draw_sprite(event.player_id, event.cursor, {id=event.cursor.."_obj", x=selection["x"]*2, y=selection["y"]*2})
-
-    Net:emit("cursor_hover", {player_id = event.player_id,cursor = cursor_cache[event.player_id]["name"],selection = selection["name"]})
-
-end)
-
--- NON-CODER FUNCTIONS
--- The functions in this section are framework management only, you shouldn't call these in your code. 
-
---purpose: splits a string based on a delimiter
---usage: used at various points to seperate values
-local function splitter(inputstr, sep)
-    if sep == nil then
-        sep = '%s'
-    else
-        sep = sep:gsub("[%(%)%.%%%+%-%*%?%[%]%^%$]", "%%%1")
-    end
-    
-    local t = {}
-    for str in (inputstr..sep):gmatch("(.-)"..sep) do
-        table.insert(t, str)
-    end
-    return t
-end
-
--- NON-CODER EVENTS
--- The events in this section are framework management; "no touchie, no touch"! 
-
---Event handlers for framework to function
-Net:on("player_join", function(event)
-    
-    table.insert(online_players, event.player_id)
-    --reset all caches on join
-    ui_cache[event.player_id] = {}
-    cursor_cache[event.player_id] = {}
-    avatar_cache[event.player_id] = {}
-
-    --hide player exclusive cosmetics
-    if next(cosmetic_cache) ~= nil then
-        for player_id,cosmetics in next,cosmetic_cache do
-            for cosmetic_id,cosmetic_data in next, cosmetics do 
-                if cosmetic_data["visibility"] == false then
-                    Net.exclude_actor_for_player(event.player_id, cosmetic_id.."_"..player_id)
-                end
-            end
-        end 
-    end 
-
-
-end)
-
-Net:on("player_disconnect", function(event)
-
-    --clear all caches on disconnect
-    cursor_cache[event.player_id] = nil
-    avatar_cache[event.player_id] = nil
-    ui_cache[event.player_id] = nil
-    ui_update[event.player_id] = nil
-
-    if Net.is_bot(event.player_id.."-double") then
-        Net.remove_bot(event.player_id.."-double",false)
-    end 
-    if Net.is_bot(event.player_id.."-camera") then
-        Net.remove_bot(event.player_id.."-camera",false)
-    end 
-    for i,player in next,online_players do 
-        if player == event.player_id then
-            online_players[i] = nil
-        end
-    end 
-
-    --remove cosmetics
-    if next(cosmetic_cache) ~= nil then
-        for player_id,cosmetics in next,cosmetic_cache do
-            if player_id == event.player_id then
-                for cosmetic_id,cosmetic_data in next, cosmetics do 
-                    Net.remove_bot(cosmetic_id.."_"..player_id,false)
-                    cosmetic_cache[player_id] = nil 
-                end
-            end 
-        end 
-    end 
-
-
-end)
-
-local tick_gap = 6
-
-Net:on("tick", function(event)
-
-    --manages emitting state = 4 if player is using a button to scroll
-    for player_id,buttons in next,button_states do
-        if not tracking_state[player_id] then
-            tracking_state[player_id] = {}
-        end
-        for name,state in next,buttons do
-            if not tracking_state[player_id][name] then 
-                tracking_state[player_id][name] = {}
-                tracking_state[player_id][name]["tracked"] = 0
-            end 
-            if state == 2 then
-                if tracking_state[player_id][name]["tracked"] == 0 then
-                    tracking_state[player_id][name]["elapsed"] = 0
-                    tracking_state[player_id][name]["tracked"] = 1
-                else
-                    tracking_state[player_id][name]["elapsed"] = event.delta_time + tracking_state[player_id][name]["elapsed"]
-                end 
-                if tracking_state[player_id][name]["elapsed"] > .3 and tracking_state[player_id][name]["tracked"] == 1 then
-                    tracking_state[player_id][name]["elapsed"] = 0
-                    Net:emit("virtual_input",{player_id = player_id,events={{state=4,name=name}}})
-                    tracking_state[player_id][name]["tracked"] = 2
-                elseif tracking_state[player_id][name]["elapsed"] > .1 and tracking_state[player_id][name]["tracked"] == 2 then
-                    tracking_state[player_id][name]["elapsed"] = 0
-                    Net:emit("virtual_input",{player_id = player_id,events={{state=4,name=name}}})
-                end 
-            else 
-                tracking_state[player_id][name]["tracked"] = 0
-                tracking_state[player_id][name]["elapsed"] = 0
-            end 
-        end
-    end        
-
-end)
-
---purpose: logic to check if cursor is active and emit corresponding events
-Net:on("virtual_input", function(event)
-
-    --move this code to check button presses every tick 
-    if cursor_cache[event.player_id] ~= nil then
-        local cursor = cursor_cache[event.player_id]
-        local direction = cursor["movement"]
-        for i,button in next,event.events do
-            if ((button.name == "Move Down" or button.name == "Move Up") and direction=="vertical" and (button.state==1 or button.state==4)) or
-            ((button.name == "Move Left" or button.name == "Move Right") and direction=="horizontal" and (button.state==1 or button.state==4)) or
-            ((button.name == "Shoulder L" or button.name == "Shoulder R") and direction=="shoulder" and (button.state==1 or button.state==4)) then
-                Net:emit("cursor_move", {player_id = event.player_id, cursor = cursor["name"], selection = cursor["current"], button = button.name})
-            --if A button emit selection
-            elseif (button.name == "Interact" or button.name == "Confirm") and button.state==1 then
-                -- Some systems set cursor_cache without selections (or clear selections during transitions).
-                -- Guard so dialogue/other virtual_input users can't crash menu selection logic.
-                local cc = cursor_cache[event.player_id]
-                local selections = cc and cc.selections
-                local idx = cc and cc.current
-
-                if selections and idx and selections[idx] and selections[idx].name then
-                    Net:emit("cursor_selection", {
-                        player_id = event.player_id,
-                        cursor = cc.name,
-                        selection = selections[idx].name
-                    })
-                else
-                    -- Optional debug (leave off if you don't want spam)
-                    -- print("[framework] cursor_selection ignored (missing selections/current)")
-                end
-            end
-
-        end
-    end
-end)
-
-Net:on("player_move", function(event)
-
-    --update cosmetic position
-    if cosmetic_cache[event.player_id] ~= nil then
-        for cosmetic_id,cosmetic_data in next,cosmetic_cache[event.player_id] do
-            local bot_position = Net.get_bot_position(cosmetic_id.."_"..event.player_id)
-            --local xoffset,yoffset = convertOffsets(cosmetic_data["x"]*-1,cosmetic_data["y"]*-1,event.z+3)
-            --local xoffset,yoffset = fixOffsets(xoffset,yoffset)
-            local keyframes = {{properties={{property="Animation",value=cosmetic_data["state"]},{property="X",ease="Linear",value=bot_position.x},{property="Y",ease="Linear",value=bot_position.y},{property="Z",ease="Linear",value=bot_position.z}},duration=0}}
-            keyframes[#keyframes+1] = {properties={{property="Animation",value=cosmetic_data["state"]},{property="X",ease="Linear",value=event.x + cosmetic_data["x"]},{property="Y",ease="Linear",value=event.y + cosmetic_data["y"]},{property="Z",ease="Linear",value=event.z+3}},duration=.1}
-            Net.move_bot(cosmetic_id.."_"..event.player_id,event.x+cosmetic_data["x"],event.y+cosmetic_data["y"],event.z+3)
-            Net.animate_bot_properties(cosmetic_id.."_"..event.player_id, keyframes)
-            Net.animate_bot(cosmetic_id.."_"..event.player_id,cosmetic_data["state"],true)
-        end
-    end
-end)
-
-Net:on("player_area_transfer", function(event)
-    --update cache position
-    if not last_position_cache[event.player_id] then
-        last_position_cache[event.player_id] = {}
+    -- If visibility=false, hide from everyone else too
+    if not visibility then
+      exclude_except_for(player_id, bot_id)
     end
 
-    last_position_cache[event.player_id]["area"] = Net.get_player_area(event.player_id)
-    --transfer cosmetics
-    if next(cosmetic_cache) ~= nil then
-        for player_id,cosmetics in next,cosmetic_cache do
-            if player_id == event.player_id then
-                for cosmetic_id,cosmetic_data in next, cosmetics do 
-                    Net.transfer_bot(cosmetic_id.."_"..player_id,last_position_cache[event.player_id]["area"],false)
-                end
-            end 
-        end 
-    end 
-end)
-
-Net:on("virtual_input", function(event) 
-    --pass inputs to cache
-    if not button_states[event.player_id] then
-        button_states[event.player_id] = {}
-    end 
-    for i,button in next,event.events do
-        button_states[event.player_id][button.name] = button.state
-    end
-
-end)
-
--- Whatcha doin'? If you're here you must be a coder, or at least interesting in coding.
--- You should help out on the Discord. There's only a few of us that can actually code. 
--- Seriously, stop reading this and come help! For real. Please. I'm begging you. 
--- Tournament compatibility shim:
--- Some forks expect scripts/net-games/framework to expose start_framework().
--- Our framework initializes on require, so this can be a no-op.
-frame._started = frame._started or false
-
-function frame.start_framework()
-  if frame._started then
     return true
-  end
-  frame._started = true
+  end)
+end
 
-  -- If your framework already initializes on require, this can stay a no-op.
-  -- If you later move init code out of module scope, put it here.
+function frame.remove_cosmetic(cosmetic_id, player_id)
+  if not cosmetic_cache[player_id] or not cosmetic_cache[player_id][cosmetic_id] then
+    print("[net-games][framework] remove_cosmetic(): cosmetic not found '" .. tostring(cosmetic_id) .. "'")
+    return false
+  end
+
+  local bot_id = cosmetic_id .. "_" .. player_id
+  if Net.is_bot(bot_id) then
+    Net.remove_bot(bot_id, false)
+  end
+
+  Net.player_erase_sprite(player_id, cosmetic_id .. "_obj")
+  cosmetic_cache[player_id][cosmetic_id] = nil
   return true
 end
 
+-- ============================================================
+-- Map elements (bots)
+-- ============================================================
+function frame.add_map_element(name, player_id, texture, animation, animation_state, X, Y, Z, exclude)
+  local area_id = (last_position_cache[player_id] and last_position_cache[player_id].area) or Net.get_player_area(player_id)
+
+  local bot_id = player_id .. "-map-" .. name
+  Net.create_bot(bot_id, {
+    area_id = area_id,
+    warp_in = false,
+    texture_path = texture,
+    animation_path = animation,
+    animation = animation_state,
+    x = X, y = Y, z = Z,
+    solid = false
+  })
+
+  if exclude == true then
+    exclude_except_for(player_id, bot_id)
+  end
+
+  Net.animate_bot(bot_id, animation_state, true)
+
+  map_elements[player_id] = map_elements[player_id] or {}
+  map_elements[player_id][name] = {
+    name = name,
+    state = animation_state,
+    id = player_id .. "-map-" .. name
+  }
+
+  return true
+end
+
+function frame.change_map_element(name, player_id, animation_state, loop)
+  local bot_id = player_id .. "-map-" .. name
+  if Net.is_bot(bot_id) then
+    Net.animate_bot(bot_id, animation_state, loop == true)
+    return true
+  end
+  print("[net-games][framework] change_map_element(): not found " .. tostring(name))
+  return false
+end
+
+function frame.move_map_element(name, player_id, X, Y, Z)
+  local bot_id = player_id .. "-map-" .. name
+  local area_id = (last_position_cache[player_id] and last_position_cache[player_id].area) or Net.get_player_area(player_id)
+  if Net.is_bot(bot_id) then
+    pcall(function()
+      if Net.transfer_bot then
+        Net.transfer_bot(bot_id, area_id, false, X, Y, Z)
+      else
+        Net.move_bot(bot_id, X, Y, Z)
+      end
+    end)
+    return true
+  end
+  return false
+end
+
+function frame.remove_map_element(name, player_id)
+  local bot_id = player_id .. "-map-" .. name
+  if Net.is_bot(bot_id) then
+    if map_elements[player_id] then map_elements[player_id][name] = nil end
+    Net.remove_bot(bot_id, false)
+    return true
+  end
+  return false
+end
+
+-- ============================================================
+-- UI elements (screen-space sprites)
+-- ============================================================
+function frame.add_ui_element(sprite_id, player_id, texture_path, animation_path, animation_state, X, Y, Z, ScaleX, ScaleY)
+  local scaleX = (ScaleX ~= nil and ScaleX >= 0.0) and ScaleX or 2.0
+  local scaleY = (ScaleY ~= nil and ScaleY >= 0.0) and ScaleY or 2.0
+  animation_path = animation_path or ""
+  animation_state = animation_state or ""
+
+  ui_cache[player_id] = ui_cache[player_id] or {}
+
+  local alloc_id = sprite_id
+  if REUSE_SPRITES_BY_TEXTURE then
+    for _, sprite_data in next, ui_cache[player_id] do
+      if sprite_data.texture_path == texture_path then
+        alloc_id = sprite_data.alloc_id or sprite_data.sprite_id or sprite_id
+        break
+      end
+    end
+  end
+
+  -- Always provide assets (safe) before alloc
+  if animation_path ~= "" then pcall(function() Net.provide_asset_for_player(player_id, animation_path) end) end
+  pcall(function() Net.provide_asset_for_player(player_id, texture_path) end)
+
+  -- Allocate sprite (safe even if alloc_id matches prior; Net tends to ignore duplicates)
+  Net.player_alloc_sprite(player_id, alloc_id, { texture_path = texture_path, anim_path = animation_path, anim_state = animation_state })
+
+  -- Draw under the requested draw id (separate from alloc_id)
+  Net.player_draw_sprite(player_id, alloc_id, {
+    id = sprite_id .. "_obj",
+    x = X * 2,
+    y = Y * 2,
+    z = Z,
+    sx = scaleX,
+    sy = scaleY,
+    anim_state = animation_state
+  })
+
+  ui_cache[player_id][sprite_id] = {
+    texture_path = texture_path,
+    alloc_id = alloc_id,
+    sprite_id = sprite_id,
+    x = X, y = Y, z = Z,
+    scaleX = scaleX, scaleY = scaleY,
+    rotation = 0,
+    animation_state = animation_state,
+    opacity = 255
+  }
+
+  return true
+end
+
+function frame.update_ui_element(sprite_id, player_id, properties)
+  if not (ui_cache[player_id] and ui_cache[player_id][sprite_id]) then return false end
+  local element = ui_cache[player_id][sprite_id]
+
+  local draw = { id = sprite_id .. "_obj" }
+
+  if properties.x then draw.x = properties.x; element.x = properties.x end
+  if properties.y then draw.y = properties.y; element.y = properties.y end
+  if properties.z then draw.z = properties.z; element.z = properties.z end
+  if properties.ox then draw.ox = properties.ox; element.ox = properties.ox end
+  if properties.oy then draw.oy = properties.oy; element.oy = properties.oy end
+
+  if properties.scale then
+    draw.sx = properties.scale
+    draw.sy = properties.scale
+    element.scaleX = properties.scale
+    element.scaleY = properties.scale
+  end
+
+  if properties.rotation then
+    draw.ro = properties.rotation
+    element.rotation = properties.rotation
+  end
+
+  if properties.opacity then
+    draw.opacity = properties.opacity
+    element.opacity = properties.opacity
+  end
+
+  if properties.animation_state then
+    draw.anim_state = properties.animation_state
+    element.animation_state = properties.animation_state
+  end
+
+  Net.player_draw_sprite(player_id, element.alloc_id, draw)
+  return true
+end
+
+function frame.set_ui_animation(sprite_id, player_id, animation_state)
+  if not (ui_cache[player_id] and ui_cache[player_id][sprite_id]) then return false end
+  local element = ui_cache[player_id][sprite_id]
+  element.animation_state = animation_state
+  Net.player_draw_sprite(player_id, element.alloc_id, { id = sprite_id .. "_obj", anim_state = animation_state })
+  return true
+end
+
+function frame.move_ui_element(sprite_id, player_id, X, Y, Z)
+  if not (ui_cache[player_id] and ui_cache[player_id][sprite_id]) then return false end
+  local element = ui_cache[player_id][sprite_id]
+  element.x, element.y, element.z = X, Y, Z
+  Net.player_draw_sprite(player_id, element.alloc_id, { id = sprite_id .. "_obj", x = X * 2, y = Y * 2, z = Z })
+  return true
+end
+
+function frame.update_ui_position(sprite_id, player_id, X, Y, Z)
+  if not (ui_cache[player_id] and ui_cache[player_id][sprite_id]) then return false end
+  local element = ui_cache[player_id][sprite_id]
+  element.x = X
+  element.y = Y
+  element.z = Z or element.z
+
+  Net.player_draw_sprite(player_id, element.alloc_id, {
+    id = sprite_id .. "_obj",
+    x = X * 2,
+    y = Y * 2,
+    z = element.z,
+    sx = element.scaleX,
+    sy = element.scaleY,
+    anim_state = element.animation_state
+  })
+  return true
+end
+
+function frame.remove_ui_element(sprite_id, player_id)
+  if ui_cache[player_id] then ui_cache[player_id][sprite_id] = nil end
+  Net.player_erase_sprite(player_id, sprite_id .. "_obj")
+  return true
+end
+
+local function clear_all_ui_for_player(player_id)
+  if not ui_cache[player_id] then return end
+
+  for sprite_id, element in next, ui_cache[player_id] do
+    -- erase draw object
+    Net.player_erase_sprite(player_id, sprite_id .. "_obj")
+  end
+
+  -- hard reset cache
+  ui_cache[player_id] = {}
+end
+
+
+-- ============================================================
+-- Text (Displayer-backed, no-op if missing)
+-- ============================================================
+function frame.draw_text(text_id, player_id, text, x, y, z, font, scale)
+  if not DISPLAYER_READY then return false end
+  Displayer.Text.drawText(player_id, text_id, text, tonumber(x) * 2, tonumber(y) * 2, z, font, scale)
+  return true
+end
+
+function frame.update_text(text_id, player_id, text)
+  if not DISPLAYER_READY then return false end
+  Displayer.Text.updateText(player_id, text_id, tostring(text))
+  return true
+end
+
+function frame.remove_text(text_id, player_id)
+  if not DISPLAYER_READY then return false end
+  Displayer.Text.removeText(player_id, text_id)
+  return true
+end
+
+function frame.draw_marquee_text(marquee_id, player_id, text, y, font, scale, z_order, speed, backdrop)
+  if not DISPLAYER_READY then return false end
+  Displayer.Text.drawMarqueeText(player_id, marquee_id, text, y, font, scale, z_order, speed, backdrop)
+  return true
+end
+
+function frame.set_marquee_position(player_id, marquee_id, x, y)
+  if not DISPLAYER_READY then return false end
+  Displayer.Text.setMarqueePosition(player_id, marquee_id, x, y)
+  return true
+end
+
+function frame.set_marquee_speed(player_id, marquee_id, speed)
+  if not DISPLAYER_READY then return false end
+  Displayer.Text.setMarqueeSpeed(player_id, marquee_id, speed)
+  return true
+end
+
+-- ============================================================
+-- Timers / Countdowns (Displayer-backed, emits countdown_ended)
+-- ============================================================
+function frame.spawn_timer(timer_id, player_id, X, Y, duration, loop)
+  if not DISPLAYER_READY then return false end
+  loop = loop or false
+  Displayer.Timer.createPlayerTimer(player_id, timer_id, duration, function(_, _, _) end, loop)
+  Displayer.TimerDisplay.createPlayerTimerDisplay(player_id, timer_id, X * 2, Y * 2, "default")
+  return true
+end
+
+function frame.resume_timer(timer_id, player_id)
+  if not DISPLAYER_READY then return false end
+  Displayer.Timer.resumePlayerTimer(player_id, timer_id)
+  return true
+end
+
+function frame.pause_timer(timer_id, player_id)
+  if not DISPLAYER_READY then return false end
+  Displayer.Timer.pausePlayerTimer(player_id, timer_id)
+  return true
+end
+
+function frame.remove_timer(timer_id, player_id)
+  if not DISPLAYER_READY then return false end
+  Displayer.Timer.removePlayerTimer(player_id, timer_id)
+  return true
+end
+
+function frame.update_timer(timer_id, player_id, duration)
+  if not DISPLAYER_READY then return false end
+  Displayer.Timer.updatePlayerTimer(player_id, timer_id, duration)
+  return true
+end
+
+function frame.spawn_countdown(countdown_id, player_id, X, Y, duration, loop)
+  if not DISPLAYER_READY then return false end
+  loop = loop or false
+  Displayer.Timer.createPlayerCountdown(player_id, countdown_id, duration, function(_, id, value)
+    if value <= 0 then
+      Net:emit("countdown_ended", { player_id = player_id, countdown_id = id })
+    end
+  end, loop)
+  Displayer.TimerDisplay.createPlayerCountdownDisplay(player_id, countdown_id, X * 2, Y * 2, "default")
+  return true
+end
+
+function frame.resume_countdown(countdown_id, player_id)
+  if not DISPLAYER_READY then return false end
+  Displayer.Timer.resumePlayerCountdown(player_id, countdown_id)
+  return true
+end
+
+function frame.pause_countdown(countdown_id, player_id)
+  if not DISPLAYER_READY then return false end
+  Displayer.Timer.pausePlayerCountdown(player_id, countdown_id)
+  return true
+end
+
+function frame.remove_countdown(countdown_id, player_id)
+  if not DISPLAYER_READY then return false end
+  Displayer.Timer.removePlayerCountdown(player_id, countdown_id)
+  return true
+end
+
+function frame.update_countdown(countdown_id, player_id, duration)
+  if not DISPLAYER_READY then return false end
+  Displayer.Timer.updatePlayerCountdown(player_id, countdown_id, duration)
+  return true
+end
+
+-- ============================================================
+-- Cursor system (virtual_input-driven)
+-- ============================================================
+function frame.spawn_cursor(cursor_id, player_id, options)
+  return async(function()
+    if not options or type(options) ~= "table" then
+      print("[net-games][framework] spawn_cursor(): missing options table")
+      return false
+    end
+
+    -- only allow one active cursor per player (matches original behavior)
+    if cursor_cache[player_id] and next(cursor_cache[player_id]) ~= nil then
+      print("[net-games][framework] spawn_cursor(): cursor already active; remove it first")
+      return false
+    end
+
+    if Net.lock_player_input then
+      Net.lock_player_input(player_id)
+    end
+
+    cursor_cache[player_id] = options
+    cursor_cache[player_id].name = cursor_id
+
+    local selections = cursor_cache[player_id].selections or {}
+    local selection = selections[1]
+    if not selection then
+      print("[net-games][framework] spawn_cursor(): selections[1] missing")
+      return false
+    end
+
+    local tex = options.texture
+    local anim = options.animation or ""
+    local state = selection.state or ""
+
+    if anim ~= "" then pcall(function() Net.provide_asset_for_player(player_id, anim) end) end
+    if tex then pcall(function() Net.provide_asset_for_player(player_id, tex) end) end
+
+    Net.player_alloc_sprite(player_id, cursor_id, {
+      texture_path = tex,
+      anim_path = anim,
+      anim_state = state
+    })
+
+    Net.player_draw_sprite(player_id, cursor_id, {
+      id = cursor_id .. "_obj",
+      x = selection.x * 2,
+      y = selection.y * 2,
+      z = selection.z,
+      sx = 2,
+      sy = 2,
+      anim_state = state
+    })
+
+    cursor_cache[player_id].sprites = cursor_cache[player_id].sprites or {}
+    cursor_cache[player_id].current = 1
+    cursor_cache[player_id].locked = false
+    return true
+  end)
+end
+
+function frame.remove_cursor(cursor_id, player_id)
+  cursor_cache[player_id] = nil
+  Net.player_erase_sprite(player_id, cursor_id .. "_obj")
+  if Net.unlock_player_input then
+    Net.unlock_player_input(player_id)
+  end
+  return true
+end
+
+Net:on("cursor_move", function(event)
+  local cc = cursor_cache[event.player_id]
+  if not cc then return end
+
+  local last = cc.current or 1
+  local selections = cc.selections or {}
+  if #selections == 0 then return end
+
+  if event.button == "Move Left" or event.button == "Shoulder L" or event.button == "Move Up" then
+    cc.current = (last == 1) and #selections or (last - 1)
+  elseif event.button == "Move Right" or event.button == "Move Down" or event.button == "Shoulder R" then
+    cc.current = (last == #selections) and 1 or (last + 1)
+  end
+
+  local sel = selections[cc.current]
+  if not sel then return end
+
+  Net.player_draw_sprite(event.player_id, event.cursor, {
+    id = event.cursor .. "_obj",
+    x = sel.x * 2,
+    y = sel.y * 2
+  })
+
+  Net:emit("cursor_hover", {
+    player_id = event.player_id,
+    cursor = cc.name,
+    selection = sel.name
+  })
+end)
+
+-- ============================================================
+-- Tournament lifecycle compatibility (expected by tournament scripts)
+-- ============================================================
+frame._started = frame._started or false
+
+function frame.start_framework()
+  if frame._started then return true end
+  frame._started = true
+  return true
+end
+
+function frame.activate_framework(...)
+  if frame.start_framework then frame.start_framework() end
+  return true
+end
+
+local function try_lock_input(player_id)
+  local ok = pcall(function()
+    if Net.lock_player_input then Net.lock_player_input(player_id) end
+  end)
+  return ok and Net.lock_player_input ~= nil
+end
+
+local function try_unlock_input(player_id)
+  local ok = pcall(function()
+    if Net.unlock_player_input then Net.unlock_player_input(player_id) end
+  end)
+  return ok and Net.unlock_player_input ~= nil
+end
+
+local function try_freeze(player_id)
+  local ok = pcall(function()
+    if Net.freeze_player then Net.freeze_player(player_id) end
+  end)
+  if ok and Net.freeze_player then return true end
+  return try_lock_input(player_id)
+end
+
+local function try_unfreeze(player_id)
+  local ok = pcall(function()
+    if Net.unfreeze_player then Net.unfreeze_player(player_id) end
+  end)
+  if ok and Net.unfreeze_player then return true end
+  return try_unlock_input(player_id)
+end
+
+function frame.freeze_player(player_id, ...)
+  if frame.start_framework then frame.start_framework() end
+  return try_freeze(player_id)
+end
+
+function frame.unfreeze_player(player_id, ...)
+  return try_unfreeze(player_id)
+end
+
+function frame.deactivate_framework(player_id, ...)
+  if not player_id then return true end
+
+  -- 1) unfreeze input
+  try_unfreeze(player_id)
+
+  -- 2) remove cursors (tourney assumes this)
+  if cursor_cache[player_id] then
+    for cursor_id, _ in next, cursor_cache[player_id] do
+      Net.player_erase_sprite(player_id, cursor_id .. "_obj")
+    end
+    cursor_cache[player_id] = nil
+  end
+
+  -- 3) clear ALL UI sprites (this fixes the stuck banner)
+  clear_all_ui_for_player(player_id)
+
+  return true
+end
+
+
+-- ============================================================
+-- Event handlers (join/leave/move/input/tick)
+-- ============================================================
+Net:on("player_join", function(event)
+  -- online list
+  if not table_has_value(online_players, event.player_id) then
+    table.insert(online_players, event.player_id)
+  end
+
+  -- caches
+  ui_cache[event.player_id] = ui_cache[event.player_id] or {}
+  cursor_cache[event.player_id] = cursor_cache[event.player_id] or {}
+  avatar_cache[event.player_id] = avatar_cache[event.player_id] or {}
+
+  provide_framework_assets(event.player_id)
+
+  -- hide player-exclusive cosmetics from joining player (visibility=false)
+  if next(cosmetic_cache) ~= nil then
+    for owner_id, cosmetics in next, cosmetic_cache do
+      for cosmetic_id, cosmetic_data in next, cosmetics do
+        if cosmetic_data.visibility == false then
+          Net.exclude_actor_for_player(event.player_id, cosmetic_id .. "_" .. owner_id)
+        end
+      end
+    end
+  end
+end)
+
+Net:on("player_disconnect", function(event)
+  cursor_cache[event.player_id] = nil
+  avatar_cache[event.player_id] = nil
+  ui_cache[event.player_id] = nil
+  ui_update[event.player_id] = nil
+  button_states[event.player_id] = nil
+  tracking_state[event.player_id] = nil
+  map_elements[event.player_id] = nil
+
+  -- remove from online list
+  for i, pid in next, online_players do
+    if pid == event.player_id then
+      online_players[i] = nil
+    end
+  end
+
+  -- remove cosmetics
+  if cosmetic_cache[event.player_id] then
+    for cosmetic_id, _ in next, cosmetic_cache[event.player_id] do
+      local bot_id = cosmetic_id .. "_" .. event.player_id
+      if Net.is_bot(bot_id) then Net.remove_bot(bot_id, false) end
+    end
+    cosmetic_cache[event.player_id] = nil
+  end
+end)
+
+Net:on("player_area_transfer", function(event)
+  last_position_cache[event.player_id] = last_position_cache[event.player_id] or {}
+  last_position_cache[event.player_id].area = Net.get_player_area(event.player_id)
+
+  -- transfer cosmetic bots to new area
+  if cosmetic_cache[event.player_id] then
+    for cosmetic_id, _ in next, cosmetic_cache[event.player_id] do
+      local bot_id = cosmetic_id .. "_" .. event.player_id
+      pcall(function()
+        if Net.transfer_bot then
+          Net.transfer_bot(bot_id, last_position_cache[event.player_id].area, false)
+        end
+      end)
+    end
+  end
+end)
+
+Net:on("player_move", function(event)
+  -- update cosmetic bots to follow
+  if cosmetic_cache[event.player_id] ~= nil then
+    for cosmetic_id, cosmetic_data in next, cosmetic_cache[event.player_id] do
+      local bot_id = cosmetic_id .. "_" .. event.player_id
+      if Net.is_bot(bot_id) then
+        Net.move_bot(bot_id, event.x + cosmetic_data.x, event.y + cosmetic_data.y, event.z + 3)
+        pcall(function()
+          if Net.animate_bot then Net.animate_bot(bot_id, cosmetic_data.state, true) end
+        end)
+      end
+    end
+  end
+end)
+
+-- cache virtual input states
+Net:on("virtual_input", function(event)
+  button_states[event.player_id] = button_states[event.player_id] or {}
+  for _, button in next, event.events do
+    button_states[event.player_id][button.name] = button.state
+  end
+end)
+
+-- emit repeated state=4 for held buttons (scrolling)
+Net:on("tick", function(event)
+  for player_id, buttons in next, button_states do
+    tracking_state[player_id] = tracking_state[player_id] or {}
+
+    for name, state in next, buttons do
+      if not tracking_state[player_id][name] then
+        tracking_state[player_id][name] = { tracked = 0, elapsed = 0 }
+      end
+
+      local t = tracking_state[player_id][name]
+      if state == 2 then
+        if t.tracked == 0 then
+          t.elapsed = 0
+          t.tracked = 1
+        else
+          t.elapsed = t.elapsed + event.delta_time
+        end
+
+        if t.elapsed > 0.3 and t.tracked == 1 then
+          t.elapsed = 0
+          Net:emit("virtual_input", { player_id = player_id, events = { { state = 4, name = name } } })
+          t.tracked = 2
+        elseif t.elapsed > 0.1 and t.tracked == 2 then
+          t.elapsed = 0
+          Net:emit("virtual_input", { player_id = player_id, events = { { state = 4, name = name } } })
+        end
+      else
+        t.tracked = 0
+        t.elapsed = 0
+      end
+    end
+  end
+end)
+
+-- cursor control via virtual_input (safe-guarded)
+Net:on("virtual_input", function(event)
+  local cc = cursor_cache[event.player_id]
+  if not cc then return end
+
+  local direction = cc.movement
+  for _, button in next, event.events do
+    local is_repeat_or_press = (button.state == 1 or button.state == 4)
+
+    if is_repeat_or_press then
+      if ((button.name == "Move Down" or button.name == "Move Up") and direction == "vertical")
+        or ((button.name == "Move Left" or button.name == "Move Right") and direction == "horizontal")
+        or ((button.name == "Shoulder L" or button.name == "Shoulder R") and direction == "shoulder") then
+        Net:emit("cursor_move", { player_id = event.player_id, cursor = cc.name, selection = cc.current, button = button.name })
+      end
+    end
+
+    if (button.name == "Interact" or button.name == "Confirm") and button.state == 1 then
+      local selections = cc.selections
+      local idx = cc.current
+      if selections and idx and selections[idx] and selections[idx].name then
+        Net:emit("cursor_selection", { player_id = event.player_id, cursor = cc.name, selection = selections[idx].name })
+      end
+    end
+  end
+end)
 
 return frame
