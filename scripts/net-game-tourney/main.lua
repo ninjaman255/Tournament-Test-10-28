@@ -413,6 +413,149 @@ local function show_tournament_results_with_animation(player_id, tournament, rou
     end)
 end
 
+-- NEW: Show results, KEEP bracket open, then ask host if they want to continue (seamless)
+local function show_tournament_results_with_animation_and_prompt(player_id, tournament, round_number)
+    return async(function()
+        if not tournament or not tournament.board_data then
+            print("[tourney] No board data stored for tournament")
+            return false
+        end
+
+        -- ====== OPEN BOARD (same as show_tournament_results_with_animation) ======
+        Net.toggle_player_hud(player_id)
+        local player_area = Net.get_player_area(player_id)
+        local original_map_name = Net.get_area_name(player_area)
+        Net.set_area_name(player_area, "            ")
+        local original_map_song = Net.get_song(player_area)
+        Net.set_song(player_area, "/server/assets/tourney/music/bbn4_tournament_announcement.ogg")
+
+        games.activate_framework(player_id)
+        games.freeze_player(player_id)
+        Net.lock_player_input(player_id)
+
+        Net.fade_player_camera(player_id, { r = 0, g = 0, b = 0, a = 255 }, 0.3)
+        await(Async.sleep(0.3))
+
+        setup_board_bg_elements(player_id, tournament.board_data.background_info)
+
+        -- PHASE 1: current positions
+        local current_positions = TournamentState.get_current_state_positions(tournament.tournament_id) or {}
+        if not current_positions or next(current_positions) == nil then
+            current_positions = {}
+            for i = 1, #tournament.board_data.stored_mugshots do
+                if mug_pos.initial[i] then
+                    current_positions[i] = mug_pos.initial[i]
+                end
+            end
+        end
+
+        for i, mugshot_data in ipairs(tournament.board_data.stored_mugshots) do
+            if current_positions[i] then
+                local pos = current_positions[i]
+                add_participant_mugshot(player_id, i, mugshot_data.mug_texture, pos.x, pos.y, pos.z)
+            end
+        end
+
+        Net.fade_player_camera(player_id, { r = 0, g = 0, b = 0, a = 0 }, 0.3)
+        await(Async.sleep(0.3))
+
+        print("[tourney] Showing CURRENT STATE for round " .. round_number)
+        await(Async.sleep(1.5))
+
+        -- PHASE 2: animate to new positions (same logic you already use)
+        local new_positions = TournamentUtils.calculate_round_positions(tournament, round_number)
+
+        if new_positions and next(new_positions) ~= nil then
+            local winners_to_move = {}
+
+            for i, mugshot_data in ipairs(tournament.board_data.stored_mugshots) do
+                local current_pos = current_positions[i]
+                local new_pos = new_positions[i]
+
+                if current_pos and new_pos and
+                   (current_pos.x ~= new_pos.x or current_pos.y ~= new_pos.y) then
+
+                    local is_winner = false
+
+                    if round_number == 1 then
+                        for _, match in ipairs(tournament.matches) do
+                            if match.completed and match.winner and match.winner.player_id == mugshot_data.player_id then
+                                is_winner = true
+                                break
+                            end
+                        end
+                    elseif round_number == 2 then
+                        for _, winner in ipairs(tournament.winners) do
+                            if winner.player_id == mugshot_data.player_id then
+                                is_winner = true
+                                break
+                            end
+                        end
+                    elseif round_number == 3 then
+                        for _, match in ipairs(tournament.matches) do
+                            if match.completed and match.winner and match.winner.player_id == mugshot_data.player_id then
+                                is_winner = true
+                                break
+                            end
+                        end
+                    end
+
+                    if is_winner then
+                        table.insert(winners_to_move, {
+                            index = i,
+                            mugshot_data = mugshot_data,
+                            from_pos = current_pos,
+                            to_pos = new_pos
+                        })
+                    end
+                end
+            end
+
+            for _, move_data in ipairs(winners_to_move) do
+                remove_participant_mugshot(player_id, move_data.index)
+                add_participant_mugshot(
+                    player_id,
+                    move_data.index,
+                    move_data.mugshot_data.mug_texture,
+                    move_data.to_pos.x,
+                    move_data.to_pos.y,
+                    move_data.to_pos.z
+                )
+                await(Async.sleep(0.6))
+            end
+
+            TournamentState.store_current_state_positions(tournament.tournament_id, new_positions)
+            TournamentState.store_round_positions(tournament.tournament_id, round_number, new_positions)
+
+            await(Async.sleep(1.5))
+        else
+            await(Async.sleep(2.0))
+        end
+
+        -- ====== KEY DIFFERENCE: DO NOT CLEAN UP YET ======
+        -- Ask while the bracket is still visible
+        await(Async.message_player(player_id, "Continue to the next round?"))
+        local choice = await(Async.quiz_player(player_id, "Continue", "End Tournament"))
+        local wants_continue = (choice == 0)
+
+        -- ====== NOW CLEAN UP (after decision) ======
+        Net.toggle_player_hud(player_id)
+        Net.fade_player_camera(player_id, { r = 0, g = 0, b = 0, a = 255 }, 0.3)
+        await(Async.sleep(0.3))
+
+        cleanup_ui(player_id, player_area, original_map_name, original_map_song)
+
+        await(Async.sleep(0.1))
+        Net.fade_player_camera(player_id, { r = 0, g = 0, b = 0, a = 0 }, 0.3)
+
+        Net.unlock_player_input(player_id)
+        games.deactivate_framework(player_id)
+
+        return wants_continue
+    end)
+end
+
+
 -- FIXED: Enhanced tournament board display with consistent participant shuffling
 local function show_tournament_stage(player_id, tournament, stage_type, is_current_state)
     return async(function()
@@ -1587,6 +1730,14 @@ Net:on("battle_results", function(event)
         print("[tourney] Player not in any tournament: " .. event.player_id)
         return
     end
+
+    -- Suppress the default battle rewards/results UI for tournament matches
+    if Net.send_player_battle_rewards then
+        pcall(function()
+            Net.send_player_battle_rewards(event.player_id, {})
+        end)
+    end
+
     
     local tournament = TournamentState.get_tournament(tournament_id)
     if not tournament then return end
