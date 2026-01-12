@@ -19,24 +19,39 @@ print("[demo_core_overlay] Loaded (9-core overlay).")
 
 local player_data = {}
 local global_timer_value = 0
+local global_timer_created = false
 
 -- Tunables
 local SPRITE_LIST_COUNTDOWN_SECONDS = 3.0
 local MISSION_COUNTDOWN_START = 60.0
 local FULLSCREEN_DELAY_AFTER_COUNTDOWN = 8.0
 
--- Positions match the old example
-local POS_GLOBAL_TIMER_X, POS_GLOBAL_TIMER_Y = 10, 10
+-- ---------------------------------------------------------------------------
+-- Layout (derived positions: edit these 3 knobs, everything else follows)
+-- ---------------------------------------------------------------------------
 
-local POS_PLAYER_TIMER_X, POS_PLAYER_TIMER_Y = 10, 50
-local POS_MISSION_TIMER_X, POS_MISSION_TIMER_Y = 10, 70
+local HUD_X = 10
+local HUD_Y = 10
+local HUD_LINE = 18 -- vertical rhythm; increase if any overlap
 
-local POS_LABEL_PLAY_X, POS_LABEL_PLAY_Y = 12, 40
-local POS_LABEL_MISSION_X, POS_LABEL_MISSION_Y = 12, 60
+-- Positions derived from the HUD column
+local POS_GLOBAL_TIMER_X, POS_GLOBAL_TIMER_Y = HUD_X, HUD_Y
 
-local POS_SPRITE_COUNTDOWN_X, POS_SPRITE_COUNTDOWN_Y = 12, 90
-local POS_DEBUG_X, POS_DEBUG_Y = 10, 110
+-- PLAY TIME (label above value)
+local POS_LABEL_PLAY_X, POS_LABEL_PLAY_Y = HUD_X + 2, POS_GLOBAL_TIMER_Y + HUD_LINE
+local POS_PLAYER_TIMER_X, POS_PLAYER_TIMER_Y = HUD_X, POS_LABEL_PLAY_Y + HUD_LINE
 
+-- MISSION TIMER (label above value)
+local POS_LABEL_MISSION_X, POS_LABEL_MISSION_Y = HUD_X + 2, POS_PLAYER_TIMER_Y + HUD_LINE
+local POS_MISSION_TIMER_X, POS_MISSION_TIMER_Y = HUD_X, POS_LABEL_MISSION_Y + HUD_LINE
+
+-- Sprite list countdown: separated slightly from timers
+local POS_SPRITE_COUNTDOWN_X, POS_SPRITE_COUNTDOWN_Y = HUD_X + 2, POS_MISSION_TIMER_Y + math.floor(HUD_LINE * 1.5)
+
+-- Debug text: below countdown
+local POS_DEBUG_X, POS_DEBUG_Y = HUD_X, POS_SPRITE_COUNTDOWN_Y + math.floor(HUD_LINE * 1.5)
+
+-- Mission complete box (kept as-is; separate layout region)
 local POS_COMPLETE_X, POS_COMPLETE_Y = 150, 120
 local COMPLETE_W, COMPLETE_H = 80, 40
 
@@ -74,7 +89,10 @@ local function create_core_displays(player_id)
   Displayer:hidePlayerHUD(player_id)
 
   -- 2) Global timer display (top-left)
-  Displayer.TimerDisplay.createGlobalTimerDisplay("global_timer", POS_GLOBAL_TIMER_X, POS_GLOBAL_TIMER_Y, "default")
+  if not global_timer_created then
+    Displayer.TimerDisplay.createGlobalTimerDisplay("global_timer", POS_GLOBAL_TIMER_X, POS_GLOBAL_TIMER_Y, "default")
+    global_timer_created = true
+  end
   Displayer.TimerDisplay.updateGlobalTimerDisplay("global_timer", global_timer_value)
 
   -- 3) Marquee/news ticker (top-ish)
@@ -218,8 +236,14 @@ Net:on("player_join", function(event)
   local player_id = event.player_id
   print("[demo_core_overlay] player_join " .. player_id)
 
+  -- Guard: if this overlay is loaded twice (or join fires twice), don't double-draw UI.
+  if player_data[player_id] then
+    return
+  end
+
   create_core_displays(player_id)
 end)
+
 
 Net:on("player_leave", function(event)
   local player_id = event.player_id
