@@ -1,7 +1,9 @@
 -- parties.lua
 local Parties = {}
-local Displayer = require("scripts/displayer/displayer")
+local Displayer = require("scripts/net-games/displayer/displayer")
+Displayer:init()
 Parties.__index = Parties
+
 
 -- Configuration
 Parties.MAX_PARTY_SIZE = 4      -- Maximum players per party
@@ -98,8 +100,10 @@ function Parties:createPlayerDisplay(playerId)
     -- Clear any existing display first
     self:clearPlayerDisplay(playerId)
 
-    -- Create countdown display using Displayer API (similar to main.lua example)
-    local displayId = "party_countdown_" .. self.id
+    -- Create countdown display using Displayer API
+    local displayId = "party_countdown_" .. tostring(self.id)
+    local labelId   = "party_label_" .. tostring(self.id)
+
     self.countdownDisplayIds[playerId] = displayId
 
     -- Create the countdown display
@@ -111,16 +115,19 @@ function Parties:createPlayerDisplay(playerId)
         "default"
     )
 
-    -- Add a label above the countdown (like in main.lua)
+    -- Add a label above the countdown
+    -- NOTE: net-games Text.drawText expects (player_id, text_id, text, x, y, z, font, scale)
     Displayer.Text.drawText(
         playerId,
+        labelId,
         "PARTY STARTING",
         Parties.DISPLAY_POSITION_X + 2,
         Parties.DISPLAY_POSITION_Y - 10,
+        100,
         "THICK",
-        0.7,
-        100
+        0.7
     )
+
 end
 
 function Parties:updateCountdownDisplays()

@@ -189,6 +189,7 @@ Net:on("player_transfer_area", function(event)
     Tourney.set_player_area(event.player_id, area)
 end)
 
+
 Net:on("player_join", function(event)
     local secret = Net.get_player_secret(event.player_id)
     local area = Net.get_player_area(event.player_id)

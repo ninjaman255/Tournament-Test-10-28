@@ -105,10 +105,13 @@ function ScrollingTextList:createScrollingList(player_id, list_id, x, y, width, 
             text = text,
             y_offset = 0,
             state = "waiting", -- waiting, scrolling, finished
-            display_objects = {},
+            display_id = nil,  -- stable text_id used by FontSystem
+            was_visible = false,
             start_delay = (i - 1) * list_config.entry_delay,
             timer = 0
         }
+
+
     end
     
     local list_data = {
@@ -161,47 +164,61 @@ end
 function ScrollingTextList:drawListEntry(player_id, list_id, entry_index, list_data)
     local config = list_data.config
     local entry_state = config.entry_states[entry_index]
-    
-    -- Clear previous display objects
-    self:clearEntryDisplay(player_id, entry_state)
-    
-    -- Calculate text position (centered horizontally, positioned vertically by y_offset)
+
+    -- Calculate text position
     local text_width = self.font_system:getTextWidth(entry_state.text, config.font, config.scale)
     local text_x = config.bounds_left + (config.bounds_width - text_width) / 2
     local text_y = config.bounds_bottom + entry_state.y_offset
-    
-    -- Only draw if within visible bounds
-    if text_y + (10 * config.scale) >= config.bounds_top and text_y <= config.bounds_bottom then
-        -- Use a unique ID for this specific entry to avoid conflicts
-        local unique_display_id = list_id .. "_entry_" .. entry_index
-        
-        local display_id = self.font_system:drawText(
+
+    -- Visible test (same logic as before)
+    local visible = (text_y + (10 * config.scale) >= config.bounds_top) and (text_y <= config.bounds_bottom)
+
+    -- Stable id per entry
+    local stable_id = entry_state.display_id or (list_id .. "_entry_" .. entry_index)
+    entry_state.display_id = stable_id
+
+    if visible then
+        -- Draw/update in place. This reuses the same character sprite ids under stable_id.
+        self.font_system:drawText(
             player_id,
-            nil,
+            stable_id,
             entry_state.text,
             text_x,
             text_y,
+            config.z_order,
             config.font,
-            config.scale,
-            config.z_order
+            config.scale
         )
-        
-        table.insert(entry_state.display_objects, {
-            type = "text",
-            id = display_id,
-            unique_id = unique_display_id
-        })
+        entry_state.was_visible = true
+    else
+        -- If it *was* visible and just went invisible, erase once.
+        if entry_state.was_visible then
+            self.font_system:eraseTextDisplay(player_id, stable_id)
+            entry_state.was_visible = false
+        end
     end
 end
 
+
 function ScrollingTextList:clearEntryDisplay(player_id, entry_state)
-    for _, display_obj in ipairs(entry_state.display_objects) do
-        if display_obj.type == "text" then
-            self.font_system:eraseTextDisplay(player_id, display_obj.id)
-        end
+    -- New model: erase by stable display_id
+    if entry_state.display_id then
+        self.font_system:eraseTextDisplay(player_id, entry_state.display_id)
     end
-    entry_state.display_objects = {}
+
+    entry_state.was_visible = false
+
+    -- Backward-compat safety: if an older entry_state still has display_objects, clear them too
+    if entry_state.display_objects then
+        for _, display_obj in ipairs(entry_state.display_objects) do
+            if display_obj.type == "text" then
+                self.font_system:eraseTextDisplay(player_id, display_obj.id)
+            end
+        end
+        entry_state.display_objects = {}
+    end
 end
+
 
 function ScrollingTextList:updateScrollingLists(delta)
     if not delta or delta <= 0 then return end
@@ -223,6 +240,17 @@ end
 
 function ScrollingTextList:updateScrollingList(player_id, list_id, list_data, delta)
     local config = list_data.config
+        -- Throttle redraws (cuts sprite traffic hard)
+        list_data._accum = (list_data._accum or 0) + delta
+        local redraw_step = 1 / 15 -- 15 FPS redraw for scrolling
+        if list_data._accum < redraw_step then
+            return
+        end
+
+        -- Use accumulated time so speed stays correct
+        delta = list_data._accum
+        list_data._accum = 0
+
     local all_entries_finished = true
     local any_entry_scrolling = false
     
@@ -315,10 +343,12 @@ function ScrollingTextList:addTextToList(player_id, list_id, text)
         text = text,
         y_offset = 0,
         state = "waiting",
-        display_objects = {},
+        display_id = nil,
+        was_visible = false,
         start_delay = start_delay,
         timer = 0
     }
+
     
     -- Update the texts array as well
     table.insert(config.texts, text)
@@ -353,10 +383,12 @@ function ScrollingTextList:setListTexts(player_id, list_id, texts)
             text = text,
             y_offset = 0,
             state = "waiting",
-            display_objects = {},
+            display_id = nil,
+            was_visible = false,
             start_delay = (i - 1) * list_data.config.entry_delay,
             timer = 0
         }
+
     end
     
     -- Start first entry if no delay
@@ -433,9 +465,12 @@ function ScrollingTextList:removeScrollingList(player_id, list_id)
     if not list_data then return end
     
     -- Clear all entry displays
-    for _, entry_state in ipairs(list_data.config.entry_states) do
-        self:clearEntryDisplay(player_id, entry_state)
-    end
+        for _, entry_state in ipairs(list_data.config.entry_states) do
+            if entry_state.display_id then
+                self.font_system:eraseTextDisplay(player_id, entry_state.display_id)
+            end
+        end
+
     
     -- Remove backdrop
     if list_data.backdrop_id then

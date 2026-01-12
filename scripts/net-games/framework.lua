@@ -18,18 +18,29 @@ Goals:
 -- ============================================================
 local Displayer_ok, Displayer = pcall(require, "scripts/net-games/displayer/displayer")
 local DISPLAYER_READY = false
+require("scripts/net-games/displayer/demo_core_overlay")
 
 if Displayer_ok and Displayer and Displayer.init and Displayer.isValid then
   local ok = false
-  pcall(function()
-    ok = (Displayer:init() == true) and (Displayer:isValid() == true)
+  local err
+  local success = pcall(function()
+    -- Displayer:init() returns self (a table), not boolean.
+    -- Treat "init succeeded" + "isValid" as readiness.
+    Displayer:init()
+    ok = (Displayer:isValid() == true)
   end)
-  DISPLAYER_READY = ok
+  DISPLAYER_READY = (success == true) and (ok == true)
+
+  if not DISPLAYER_READY then
+    err = err or "(unknown)"
+    print("[net-games][framework] Displayer init failed or invalid; text/timers will be no-ops.")
+  end
 end
 
 if not DISPLAYER_READY then
   print("[net-games][framework] Displayer not available/valid; text/timers will be no-ops.")
 end
+
 
 -- ============================================================
 -- Framework state / caches
