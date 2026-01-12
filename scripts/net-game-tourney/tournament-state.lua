@@ -1,9 +1,12 @@
 local TournamentState = {}
 local active_tournaments = {}
+local next_tournament_id = 0
 local player_tournaments = {} -- Tracks which tournament each player is in
 
 function TournamentState.create_tournament(board_id, area_id, host_player_id)
-    local tournament_id = #active_tournaments + 1
+    next_tournament_id = next_tournament_id + 1
+    local tournament_id = next_tournament_id
+
     local tournament = {
         tournament_id = tournament_id,
         board_id = board_id,

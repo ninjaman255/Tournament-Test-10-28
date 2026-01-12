@@ -15,6 +15,8 @@ local TourneyEmitters = require("scripts/net-game-tourney/emitters")
 local tourney_table = require("scripts/net-game-tourney/table-templates/tournament-template")
 local TournamentState = require("scripts/net-game-tourney/tournament-state")
 local TournamentUtils = require("scripts/net-game-tourney/tournament-utils")
+local post_battle_waiting = {} -- player_id -> true while they are still in battle/results scene
+local post_battle_ready = {}   -- player_id -> true once they have returned (moved / area transferred)
 
 games.start_framework()
 
@@ -64,6 +66,16 @@ local NPC_WEIGHTS = {
 
 function async(p) local co = coroutine.create(p) return Async.promisify(co) end
 function await(v) return Async.await(v) end
+-- Better RNG seeding: prevents same-second tournament seeds producing identical brackets
+local function reseed_rng()
+    local t = os.time()
+    local c = math.floor(os.clock() * 1000000) -- sub-second entropy
+    local addr = tonumber((tostring({}):match("0x(%x+)") or "0"), 16) or 0
+    math.randomseed(t + c + addr)
+
+    -- throw away first few values (common Lua practice)
+    math.random(); math.random(); math.random()
+end
 
 -- Add missing helper functions
 local function start_party(player_id, player_area, object_id)
@@ -171,19 +183,54 @@ local function get_npc_weight(npc_id)
 end
 
 -- Enhanced function to add participant mugshot with proper ID tracking and z-coordinate
-local function add_participant_mugshot(player_id, mugshot_id, mug_texture_path, x, y, z)
-    local z_pos = z or 2  -- Default to 2 if z is not provided
-    games.add_ui_element("MUG_FRAME_" .. mugshot_id, player_id,
-        "/server/assets/tourney/tourney-board-elements/mini-mug-frame.png", "/server/assets/tourney/tourney-board-elements/mini-mug-frame.anim", "ACTIVE", x, y, z_pos + 1)  -- Frame above mugshot
-    games.add_ui_element("MUG_" .. mugshot_id, player_id, mug_texture_path,
-        default_mug_anim, "UI", x, y, z_pos, 1, 1)
+-- Namespaced mug UI IDs to prevent sprite binding reuse across tournaments.
+-- Also removes legacy IDs as a safety net.
+local function _mug_element_ids(tournament_id, mugshot_id)
+    local tid = tostring(tournament_id or "LEGACY")
+    return
+        "MUG_FRAME_" .. tid .. "_" .. mugshot_id,
+        "MUG_" .. tid .. "_" .. mugshot_id,
+        "MUG_FRAME_" .. mugshot_id, -- legacy
+        "MUG_" .. mugshot_id        -- legacy
 end
 
--- Enhanced function to remove specific participant mugshot
-local function remove_participant_mugshot(player_id, mugshot_id)
-    games.remove_ui_element("MUG_FRAME_" .. mugshot_id, player_id)
-    games.remove_ui_element("MUG_" .. mugshot_id, player_id)
+local function add_participant_mugshot(player_id, tournament_id, mugshot_id, mug_texture_path, x, y, z)
+    local z_pos = z or 2  -- Default to 2 if z is not provided
+
+    local frame_id, mug_id = _mug_element_ids(tournament_id, mugshot_id)
+
+    games.add_ui_element(
+        frame_id,
+        player_id,
+        "/server/assets/tourney/tourney-board-elements/mini-mug-frame.png",
+        "/server/assets/tourney/tourney-board-elements/mini-mug-frame.anim",
+        "ACTIVE",
+        x, y, z_pos + 1
+    )
+
+    games.add_ui_element(
+        mug_id,
+        player_id,
+        mug_texture_path,
+        default_mug_anim,
+        "UI",
+        x, y, z_pos,
+        1, 1
+    )
 end
+
+local function remove_participant_mugshot(player_id, tournament_id, mugshot_id)
+    local frame_id, mug_id, legacy_frame_id, legacy_mug_id = _mug_element_ids(tournament_id, mugshot_id)
+
+    -- remove namespaced
+    games.remove_ui_element(frame_id, player_id)
+    games.remove_ui_element(mug_id, player_id)
+
+    -- remove legacy (safety net)
+    games.remove_ui_element(legacy_frame_id, player_id)
+    games.remove_ui_element(legacy_mug_id, player_id)
+end
+
 
 local function setup_board_bg_elements(player_id, info)
     games.add_ui_element("BOARD BG", player_id, info.gradient_texture,
@@ -203,10 +250,21 @@ local function setup_board_bg_elements(player_id, info)
 end
 
 local function cleanup_ui(player_id, player_area, name, song)
-    for _, element in next, frames_to_remove do games.remove_ui_element(element, player_id) end
+    -- remove all static tournament UI elements
+    for _, element in next, frames_to_remove do
+        games.remove_ui_element(element, player_id)
+    end
+
+    for i = 1, 8 do
+        -- tournament_id unknown here; remove legacy IDs too (handled by helper)
+        remove_participant_mugshot(player_id, nil, i)
+    end
+
+
     Net.set_area_name(player_area, name)
     Net.set_song(player_area, song)
 end
+
 
 -- NEW: Function to clear parties and waiting queues for a tournament
 local function cleanup_tournament_parties(tournament_id)
@@ -282,6 +340,13 @@ local function show_tournament_results_with_animation(player_id, tournament, rou
         Net.fade_player_camera(player_id, { r = 0, g = 0, b = 0, a = 255 }, 0.3)
         await(Async.sleep(0.3))
         
+        -- IMPORTANT: clear any previously drawn mugs before re-drawing positions
+        for i = 1, 8 do
+            remove_participant_mugshot(player_id, tournament.tournament_id, i)
+        end
+
+
+
         -- Setup board background once (keep it open throughout)
         setup_board_bg_elements(player_id, tournament.board_data.background_info)
         
@@ -302,7 +367,7 @@ local function show_tournament_results_with_animation(player_id, tournament, rou
         for i, mugshot_data in ipairs(tournament.board_data.stored_mugshots) do
             if current_positions[i] then
                 local pos = current_positions[i]
-                add_participant_mugshot(player_id, i, mugshot_data.mug_texture, pos.x, pos.y, pos.z)
+                add_participant_mugshot(player_id, tournament.tournament_id, i, mugshot_data.mug_texture, pos.x, pos.y, pos.z)    
             end
         end
         
@@ -377,12 +442,15 @@ local function show_tournament_results_with_animation(player_id, tournament, rou
             for _, move_data in ipairs(winners_to_move) do
                 print(string.format("[tourney] Moving winner mugshot %d", move_data.index))
                 
-                -- Remove from old position and add to new position
-                remove_participant_mugshot(player_id, move_data.index)
-                add_participant_mugshot(player_id, move_data.index, 
-                    move_data.mugshot_data.mug_texture, 
-                    move_data.to_pos.x, move_data.to_pos.y, move_data.to_pos.z)
-                
+            remove_participant_mugshot(player_id, tournament.tournament_id, move_data.index)
+            add_participant_mugshot(
+                player_id,
+                tournament.tournament_id,
+                move_data.index,
+                move_data.mugshot_data.mug_texture,
+                move_data.to_pos.x, move_data.to_pos.y, move_data.to_pos.z
+            )
+
                 -- Brief pause between each movement
                 await(Async.sleep(0.6))
             end
@@ -452,7 +520,7 @@ local function show_tournament_results_with_animation_and_prompt(player_id, tour
         for i, mugshot_data in ipairs(tournament.board_data.stored_mugshots) do
             if current_positions[i] then
                 local pos = current_positions[i]
-                add_participant_mugshot(player_id, i, mugshot_data.mug_texture, pos.x, pos.y, pos.z)
+                add_participant_mugshot(player_id, tournament.tournament_id, i, mugshot_data.mug_texture, pos.x, pos.y, pos.z)
             end
         end
 
@@ -512,15 +580,17 @@ local function show_tournament_results_with_animation_and_prompt(player_id, tour
             end
 
             for _, move_data in ipairs(winners_to_move) do
-                remove_participant_mugshot(player_id, move_data.index)
+            remove_participant_mugshot(player_id, tournament.tournament_id, move_data.index)
                 add_participant_mugshot(
                     player_id,
+                    tournament.tournament_id,
                     move_data.index,
                     move_data.mugshot_data.mug_texture,
                     move_data.to_pos.x,
                     move_data.to_pos.y,
                     move_data.to_pos.z
                 )
+
                 await(Async.sleep(0.6))
             end
 
@@ -576,7 +646,11 @@ local function show_tournament_stage(player_id, tournament, stage_type, is_curre
         Net.lock_player_input(player_id)
         Net.fade_player_camera(player_id, { r = 0, g = 0, b = 0, a = 255 }, 0.3)
         await(Async.sleep(0.3))
-        
+        -- clear any previously drawn mugs before re-drawing
+        for i = 1, 8 do
+           remove_participant_mugshot(player_id, tournament.tournament_id, i)
+        end
+
         -- Setup board background
         setup_board_bg_elements(player_id, tournament.board_data.background_info)
         
@@ -616,11 +690,11 @@ local function show_tournament_stage(player_id, tournament, stage_type, is_curre
         for i, mugshot_data in ipairs(tournament.board_data.stored_mugshots) do
             if display_positions[i] then
                 local pos = display_positions[i]
-                add_participant_mugshot(player_id, i, mugshot_data.mug_texture, pos.x, pos.y, pos.z)
+                add_participant_mugshot(player_id, tournament.tournament_id, i, mugshot_data.mug_texture, pos.x, pos.y, pos.z)
             elseif mug_pos.initial[i] then
                 -- Fallback to initial position for any missing participants
                 local pos = mug_pos.initial[i]
-                add_participant_mugshot(player_id, i, mugshot_data.mug_texture, pos.x, pos.y, pos.z)
+                add_participant_mugshot(player_id, tournament.tournament_id, i, mugshot_data.mug_texture, pos.x, pos.y, pos.z)
             end
         end
         
@@ -1022,6 +1096,36 @@ local function verify_tournament_state(tournament_id, round_number)
     return true
 end
 
+local function await_real_players_returned_from_battle(tournament)
+    return async(function()
+        if not tournament then return end
+
+        -- Only wait for real players (not .zip NPCs), and only if they are flagged as waiting.
+        while true do
+            local all_ready = true
+
+            for _, participant in ipairs(tournament.participants or {}) do
+                local pid = participant.player_id
+                local is_real_player = not string.find(pid, ".zip")
+
+                if is_real_player and Net.is_player(pid) then
+                    if post_battle_waiting[pid] and not post_battle_ready[pid] then
+                        all_ready = false
+                        break
+                    end
+                end
+            end
+
+            if all_ready then
+                return true
+            end
+
+            await(Async.sleep(0.1))
+        end
+    end)
+end
+
+
 -- FIXED: Enhanced tournament battles with proper synchronization and NPC handling
 local function run_tournament_battles(tournament_id)
     return async(function()
@@ -1126,14 +1230,17 @@ await(start_all_battles(tournament_id))
         end
         
         print("[tourney] All battles completed for round " .. tournament.current_round)
-        
-        -- FIXED: Add additional delay to ensure all battle results are processed
-        await(Async.sleep(1.0))
-        
-        -- FIXED: Verify tournament state before showing results
+
+        -- Wait until real players have exited the battle/results scene and are back in overworld control
+        await(await_real_players_returned_from_battle(tournament))
+
+        await(Async.sleep(0.1)) -- tiny cushion
+
         verify_tournament_state(tournament_id, tournament.current_round)
-        
+
         -- Show appropriate results board after the round is complete
+
+
         local results_stage = nil
         if tournament.current_round == 1 then
             results_stage = "round1_results"
@@ -1420,34 +1527,38 @@ local function initialize_tournament_participants(participants, backfill, tourna
     -- Ensure we have exactly 8 participants
     return TableUtils.SelectRandomItemsFromTableClamped(final, 8)
 end
-
 -- FIXED: Enhanced function to ensure participant consistency with single randomization
 local function create_consistent_tournament(player_id, object_id, area_id, board_background_setup_info, is_single_player)
     return async(function()
+        -- Reseed RNG so shuffles/random NPC picks differ between tournaments without restarting the server
+        -- (must NOT use tournament_id here because it doesn't exist yet)
+        reseed_rng()
+        print("[tourney] rng_check=" .. math.random(1, 999999))
+
         local tournament_participants
-        
+
         if is_single_player then
             local mug = Net.get_player_mugshot(player_id).texture_path
             tournament_participants = initialize_tournament_participants(
-                { { player_id = player_id, player_mugshot = { mug_animation = default_mug_anim, mug_texture = mug } } }, 
-                true,  -- backfill
-                "single",  -- single player tournament type
-                false  -- DO shuffle for single player
+                { { player_id = player_id, player_mugshot = { mug_animation = default_mug_anim, mug_texture = mug } } },
+                true,   -- backfill
+                "single",
+                false   -- DO shuffle for single player
             )
         else
             -- For multiplayer, use the existing queue and DO NOT shuffle to preserve PvP integrity
             local board_tournament = tourney_boards[area_id][object_id].active_tournaments
             tournament_participants = initialize_tournament_participants(
-                board_tournament, 
-                true,  -- backfill  
-                "multiplayer",  -- multiplayer tournament type
-                true  -- PRESERVE order for multiplayer consistency
+                board_tournament,
+                true,   -- backfill
+                "multiplayer",
+                true    -- PRESERVE order for multiplayer consistency
             )
         end
-        
+
         -- Create tournament
         local tournament_id = TournamentState.create_tournament(object_id, area_id, player_id)
-        
+
         -- Store the initial participant order in tournament state for consistency
         local tournament = TournamentState.get_tournament(tournament_id)
         tournament.initial_participant_order = {}
@@ -1457,32 +1568,34 @@ local function create_consistent_tournament(player_id, object_id, area_id, board
                 initial_index = i
             }
         end
-        
+
         -- Add participants in the consistent order (whether shuffled or preserved)
         for _, participant in ipairs(tournament_participants) do
             TournamentState.add_participant(tournament_id, participant)
         end
-        
+
         -- NEW: Initialize participant states
         TournamentState.initialize_participant_states(tournament_id)
-        
+
         -- Store board data with the consistent participant order
         store_tournament_board_data(tournament_id, board_background_setup_info, tournament_participants)
-        
+
         -- DEBUG: Print the final participant order for verification
         print("[tourney] Final tournament participant order:")
         for i, participant in ipairs(tournament_participants) do
             local player_type = string.find(participant.player_id, ".zip") and "NPC" or "Player"
             print(string.format("  Position %d: %s (%s)", i, participant.player_id, player_type))
         end
-        
+
         if TournamentState.start_tournament(tournament_id) then
             return tournament_id, tournament_participants
         end
-        
+
         return nil, nil
     end)
 end
+
+
 ---------------------------------------------------------------------
 -- Board Initialization
 ---------------------------------------------------------------------
@@ -1550,6 +1663,23 @@ local function cleanup_orphaned_parties()
               parties_cleared, waiting_cleared))
     end
 end
+
+local function mark_player_back_from_battle(player_id)
+    if post_battle_waiting[player_id] then
+        post_battle_waiting[player_id] = nil
+        post_battle_ready[player_id] = true
+        print("[tourney] Player returned from battle: " .. player_id)
+    end
+end
+
+-- When the client is back in the overworld, they'll typically move or transfer area.
+Net:on("player_move", function(event)
+    mark_player_back_from_battle(event.player_id)
+end)
+
+Net:on("player_area_transfer", function(event)
+    mark_player_back_from_battle(event.player_id)
+end)
 
 
 ---------------------------------------------------------------------
@@ -1723,22 +1853,20 @@ end)
 -- Enhanced battle results handler with disqualification support and proper NPC battle detection
 Net:on("battle_results", function(event)
     print("[tourney] Battle results received:", event.player_id, event.health, event.time, event.ran)
-    
+
     -- Find which tournament this player is in
     local tournament_id = TournamentState.get_tournament_id_by_player(event.player_id)
+    
     if not tournament_id then
         print("[tourney] Player not in any tournament: " .. event.player_id)
         return
     end
 
-    -- Suppress the default battle rewards/results UI for tournament matches
-    if Net.send_player_battle_rewards then
-        pcall(function()
-            Net.send_player_battle_rewards(event.player_id, {})
-        end)
-    end
+    -- Gate post-round UI until the player has fully returned from the battle/results scene.
+    post_battle_waiting[event.player_id] = true
+    post_battle_ready[event.player_id] = false
 
-    
+
     local tournament = TournamentState.get_tournament(tournament_id)
     if not tournament then return end
     

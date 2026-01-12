@@ -364,15 +364,10 @@ function frame.add_ui_element(sprite_id, player_id, texture_path, animation_path
 
   ui_cache[player_id] = ui_cache[player_id] or {}
 
-  local alloc_id = sprite_id
-  if REUSE_SPRITES_BY_TEXTURE then
-    for _, sprite_data in next, ui_cache[player_id] do
-      if sprite_data.texture_path == texture_path then
-        alloc_id = sprite_data.alloc_id or sprite_data.sprite_id or sprite_id
-        break
-      end
-    end
-  end
+  -- Allocation ids must be unique per texture/anim, otherwise Net ignores re-allocs
+  -- and you'll get stale visuals (exactly your tourney bracket issue).
+  local alloc_id = tostring(sprite_id) .. "|" .. tostring(texture_path) .. "|" .. tostring(animation_path or "")
+
 
   -- Always provide assets (safe) before alloc
   if animation_path ~= "" then pcall(function() Net.provide_asset_for_player(player_id, animation_path) end) end
