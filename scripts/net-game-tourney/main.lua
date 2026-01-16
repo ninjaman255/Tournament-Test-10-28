@@ -20,6 +20,9 @@ local post_battle_ready = {}   -- player_id -> true once they have returned (mov
 
 games.start_framework()
 
+print("[demo_core_overlay] Loaded (9-core overlay).")
+
+
 local tourney_boards = {}
 local player_interaction_locks = {} -- prevent duplicate prompts
 local active_countdowns = {} -- Track active countdowns to fix the timer issue
@@ -1817,8 +1820,8 @@ Net:on("object_interaction", function(event)
                         Net.lock_player_input(event.player_id)
                         -- Track this countdown
                         active_countdowns[event.player_id] = true
-                        games.spawn_countdown(event.player_id, 100, 20, 10, duration)
-                        games.start_countdown(event.player_id)
+                        games.spawn_countdown(100,event.player_id, 20, 10, duration, false)
+              
                         TourneyEmitters.players_waiting[event.player_id] = { waiting = true, tourney_board = event.object_id }
                     elseif new_result == 1 then
                         local tournament_id, participants = await(create_consistent_tournament(
@@ -1843,8 +1846,7 @@ Net:on("object_interaction", function(event)
                         Net.lock_player_input(event.player_id)
                         -- Track this countdown
                         active_countdowns[event.player_id] = true
-                        games.spawn_countdown(event.player_id, 100, 20, 10, duration)
-                        games.start_countdown(event.player_id)
+                        games.spawn_countdown(100,event.player_id, 20, 10, duration, false)
                         TourneyEmitters.players_waiting[event.player_id] = { waiting = true, tourney_board = event.object_id }
                     elseif new_result == 1 then
                         local tournament_id, participants = await(create_consistent_tournament(
@@ -1915,8 +1917,8 @@ Net:on("countdown_ended", function(event)
             Net.lock_player_input(event.player_id)
             
             active_countdowns[event.player_id] = true
-            games.spawn_countdown(event.player_id, 100, 20, 10, duration)
-            games.start_countdown(event.player_id)
+            games.spawn_countdown(100,event.player_id, 20, 10, duration, false)
+          
             
             TourneyEmitters.players_waiting[event.player_id] = {
                 waiting = true,
