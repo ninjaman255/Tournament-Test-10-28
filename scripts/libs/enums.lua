@@ -80,7 +80,7 @@ local BattleReason = {
     WIN = 1,
     LOSE = 2,
     RUN = 3,
-    USERPANIC = 4,
+    USER_PANIC = 4,
 }
 
 return {
