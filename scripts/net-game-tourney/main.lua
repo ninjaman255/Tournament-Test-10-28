@@ -1934,7 +1934,8 @@ end)
 
 -- Enhanced battle results handler with disqualification support and proper NPC battle detection
 Net:on("battle_results", function(event)
-    print("[tourney] Battle results received:", event.player_id, event.health, event.time, event.ran)
+    print(event)
+    -- print("[tourney] Battle results received:", event.player_id, event.health, event.time, event.ran)
 
     -- Find which tournament this player is in
     local tournament_id = TournamentState.get_tournament_id_by_player(event.player_id)
