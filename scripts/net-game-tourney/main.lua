@@ -231,6 +231,82 @@ local function remove_participant_mugshot(player_id, tournament_id, mugshot_id)
     games.remove_ui_element(legacy_mug_id, player_id)
 end
 
+local function setup_board_bar_elements(player_id)
+    ---------------------
+    --- Progress bars ---
+    ---------------------
+    -- Tier 1 progress bars
+    games.add_ui_element("TIER1_1", player_id, constants.progress_bar_path.bottom_tier.texture,
+        constants.progress_bar_path.bottom_tier.anim, "L1_MOVE", 17, 96, 1)
+    games.add_ui_element("TIER1_2", player_id, constants.progress_bar_path.bottom_tier.texture,
+        constants.progress_bar_path.bottom_tier.anim, "R1_MOVE", 47, 96, 1)
+    games.add_ui_element("TIER1_3", player_id, constants.progress_bar_path.bottom_tier.texture,
+        constants.progress_bar_path.bottom_tier.anim, "L1_MOVE", 73, 96, 1)
+    games.add_ui_element("TIER1_4", player_id, constants.progress_bar_path.bottom_tier.texture,
+        constants.progress_bar_path.bottom_tier.anim, "R1_MOVE", 103, 96, 1)
+    games.add_ui_element("TIER1_5", player_id, constants.progress_bar_path.bottom_tier.texture,
+        constants.progress_bar_path.bottom_tier.anim, "L1_MOVE", 137, 96, 1)
+    games.add_ui_element("TIER1_6", player_id, constants.progress_bar_path.bottom_tier.texture,
+        constants.progress_bar_path.bottom_tier.anim, "R1_MOVE", 167, 96, 1)
+    games.add_ui_element("TIER1_7", player_id, constants.progress_bar_path.bottom_tier.texture,
+        constants.progress_bar_path.bottom_tier.anim, "L1_MOVE", 193, 96, 1)
+    games.add_ui_element("TIER1_8", player_id, constants.progress_bar_path.bottom_tier.texture,
+        constants.progress_bar_path.bottom_tier.anim, "R1_MOVE", 223, 96, 1)
+    
+    -- Tier 2 progress bars
+    games.add_ui_element("TIER2_1", player_id, constants.progress_bar_path.middle_tier.texture,
+        constants.progress_bar_path.middle_tier.anim, "L2_MOVE", 29, 72, 1)
+    games.add_ui_element("TIER2_2", player_id, constants.progress_bar_path.middle_tier.texture,
+        constants.progress_bar_path.middle_tier.anim, "R2_MOVE", 91, 72, 1)
+    games.add_ui_element("TIER2_3", player_id, constants.progress_bar_path.middle_tier.texture,
+        constants.progress_bar_path.middle_tier.anim, "L2_MOVE", 149, 72, 1)
+    games.add_ui_element("TIER2_4", player_id, constants.progress_bar_path.middle_tier.texture,
+        constants.progress_bar_path.middle_tier.anim, "R2_MOVE", 211, 72, 1)
+    
+    -- Tier 3 progress bars
+    games.add_ui_element("TIER3_1", player_id, constants.progress_bar_path.top_tier.texture,
+        constants.progress_bar_path.top_tier.anim, "L3_MOVE", 57, 56, 1)
+    games.add_ui_element("TIER3_2", player_id, constants.progress_bar_path.top_tier.texture,
+        constants.progress_bar_path.top_tier.anim, "R3_MOVE", 183, 56, 1)
+
+    -----------------------------
+    --- Progress bar overlays ---
+    -----------------------------
+    -- Tier 1 progress bar overlay
+    games.add_ui_element("TIER1_OVERLAY_1", player_id, constants.progress_bar_overlay_path.blue_moon.bottom_tier.texture,
+        constants.progress_bar_overlay_path.blue_moon.bottom_tier.anim, "L1_MOVE", 17, 96, 2)
+    games.add_ui_element("TIER1_OVERLAY_2", player_id, constants.progress_bar_overlay_path.blue_moon.bottom_tier.texture,
+        constants.progress_bar_overlay_path.blue_moon.bottom_tier.anim, "R1_MOVE", 47, 96, 2)
+    games.add_ui_element("TIER1_OVERLAY_3", player_id, constants.progress_bar_overlay_path.blue_moon.bottom_tier.texture,
+        constants.progress_bar_overlay_path.blue_moon.bottom_tier.anim, "L1_MOVE", 73, 96, 2)
+    games.add_ui_element("TIER1_OVERLAY_4", player_id, constants.progress_bar_overlay_path.blue_moon.bottom_tier.texture,
+        constants.progress_bar_overlay_path.blue_moon.bottom_tier.anim, "R1_MOVE", 103, 96, 2)
+    games.add_ui_element("TIER1_OVERLAY_5", player_id, constants.progress_bar_overlay_path.blue_moon.bottom_tier.texture,
+        constants.progress_bar_overlay_path.blue_moon.bottom_tier.anim, "L1_MOVE", 137, 96, 2)
+    games.add_ui_element("TIER1_OVERLAY_6", player_id, constants.progress_bar_overlay_path.blue_moon.bottom_tier.texture,
+        constants.progress_bar_overlay_path.blue_moon.bottom_tier.anim, "R1_MOVE", 167, 96, 2)
+    games.add_ui_element("TIER1_OVERLAY_7", player_id, constants.progress_bar_overlay_path.blue_moon.bottom_tier.texture,
+        constants.progress_bar_overlay_path.blue_moon.bottom_tier.anim, "L1_MOVE", 193, 96, 2)
+    games.add_ui_element("TIER1_OVERLAY_8", player_id, constants.progress_bar_overlay_path.blue_moon.bottom_tier.texture,
+        constants.progress_bar_overlay_path.blue_moon.bottom_tier.anim, "R1_MOVE", 223, 96, 2)
+    
+    -- Tier 2 progress bar overlay
+    games.add_ui_element("TIER2_OVERLAY_1", player_id, constants.progress_bar_overlay_path.blue_moon.middle_tier.texture,
+        constants.progress_bar_overlay_path.blue_moon.middle_tier.anim, "L2_MOVE", 29, 72, 2)
+    games.add_ui_element("TIER2_OVERLAY_2", player_id, constants.progress_bar_overlay_path.blue_moon.middle_tier.texture,
+        constants.progress_bar_overlay_path.blue_moon.middle_tier.anim, "R2_MOVE", 91, 72, 2)
+    games.add_ui_element("TIER2_OVERLAY_3", player_id, constants.progress_bar_overlay_path.blue_moon.middle_tier.texture,
+        constants.progress_bar_overlay_path.blue_moon.middle_tier.anim, "L2_MOVE", 149, 72, 2)
+    games.add_ui_element("TIER2_OVERLAY_4", player_id, constants.progress_bar_overlay_path.blue_moon.middle_tier.texture,
+        constants.progress_bar_overlay_path.blue_moon.middle_tier.anim, "R2_MOVE", 211, 72, 2)
+    
+    -- Tier 3 progress bar overlay
+    games.add_ui_element("TIER3_OVERLAY_1", player_id, constants.progress_bar_overlay_path.blue_moon.top_tier.texture,
+        constants.progress_bar_overlay_path.blue_moon.top_tier.anim, "L3_MOVE", 57, 56, 2)
+    games.add_ui_element("TIER3_OVERLAY_2", player_id, constants.progress_bar_overlay_path.blue_moon.top_tier.texture,
+        constants.progress_bar_overlay_path.blue_moon.top_tier.anim, "R3_MOVE", 183, 56, 2)
+
+end
 
 local function setup_board_bg_elements(player_id, info)
     games.add_ui_element("BOARD BG", player_id, info.gradient_texture,
@@ -247,7 +323,11 @@ local function setup_board_bg_elements(player_id, info)
         constants.crown_anim_path, "INACTIVE", crown1_pos.x, crown1_pos.y, crown1_pos.z)
     games.add_ui_element("CROWN_2", player_id, constants.crown_texture_path,
         constants.crown_anim_path, "INACTIVE", crown2_pos.x, crown2_pos.y, crown2_pos.z)
+    
+    setup_board_bar_elements(player_id)
 end
+
+
 
 local function cleanup_ui(player_id, player_area, name, song)
     -- remove all static tournament UI elements

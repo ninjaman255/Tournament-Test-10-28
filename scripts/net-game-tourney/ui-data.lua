@@ -23,6 +23,37 @@ local UI_DATA = {
     "TITLE BANNER",
     "CROWN_1", 
     "CROWN_2",
+    
+    "PROGESS_BAR_TIER1_1",
+    "PROGESS_BAR_TIER1_2",
+    "PROGESS_BAR_TIER1_3",
+    "PROGESS_BAR_TIER1_4",
+    "PROGESS_BAR_TIER1_5",
+    "PROGESS_BAR_TIER1_6",
+    "PROGESS_BAR_TIER1_7",
+    "PROGESS_BAR_TIER1_8",
+    "PROGESS_BAR_OVERLAY_TIER1_1",
+    "PROGESS_BAR_OVERLAY_TIER1_2",
+    "PROGESS_BAR_OVERLAY_TIER1_3",
+    "PROGESS_BAR_OVERLAY_TIER1_4",
+    "PROGESS_BAR_OVERLAY_TIER1_5",
+    "PROGESS_BAR_OVERLAY_TIER1_6",
+    "PROGESS_BAR_OVERLAY_TIER1_7",
+    "PROGESS_BAR_OVERLAY_TIER1_8",
+    
+    "PROGESS_BAR_TIER2_1",
+    "PROGESS_BAR_TIER2_2",
+    "PROGESS_BAR_TIER2_3",
+    "PROGESS_BAR_TIER2_4",
+    "PROGESS_BAR_OVERLAY_TIER2_1",
+    "PROGESS_BAR_OVERLAY_TIER2_2",
+    "PROGESS_BAR_OVERLAY_TIER2_3",
+    "PROGESS_BAR_OVERLAY_TIER2_4",
+
+    "PROGESS_BAR_TIER3_1",
+    "PROGESS_BAR_TIER3_2",
+    "PROGESS_BAR_OVERLAY_TIER3_1",
+    "PROGESS_BAR_OVERLAY_TIER3_2",
     },
     unmoving_ui_pos = {
         bg = {
@@ -63,10 +94,46 @@ local UI_DATA = {
     },
     -- 14 different spots for the progress bars to be placed.
     progress_bars = {
+        -- Tier 1
+        TIER1_1 = { x = 17,  y = 96, z = 1 },
+        TIER1_2 = { x = 47,  y = 96, z = 1 },
+        TIER1_3 = { x = 73,  y = 96, z = 1 },
+        TIER1_4 = { x = 103, y = 96, z = 1 },
+        TIER1_5 = { x = 137, y = 96, z = 1 },
+        TIER1_6 = { x = 167, y = 96, z = 1 },
+        TIER1_7 = { x = 193, y = 96, z = 1 },
+        TIER1_8 = { x = 223, y = 96, z = 1 },
 
+        -- Tier 2
+        TIER2_1 = { x = 29,  y = 72, z = 1 },
+        TIER2_2 = { x = 91,  y = 72, z = 1 },
+        TIER2_3 = { x = 149, y = 72, z = 1 },
+        TIER2_4 = { x = 211, y = 72, z = 1 },
+
+        -- Tier 3
+        TIER3_1 = { x = 57,  y = 56, z = 1 },
+        TIER3_2 = { x = 183, y = 56, z = 1 },
     },
     progress_bar_overlays = {
+        -- Tier 1 (Blue Moon)
+        TIER1_1 = { x = 17,  y = 96, z = 2 },
+        TIER1_2 = { x = 47,  y = 96, z = 2 },
+        TIER1_3 = { x = 73,  y = 96, z = 2 },
+        TIER1_4 = { x = 103, y = 96, z = 2 },
+        TIER1_5 = { x = 137, y = 96, z = 2 },
+        TIER1_6 = { x = 167, y = 96, z = 2 },
+        TIER1_7 = { x = 193, y = 96, z = 2 },
+        TIER1_8 = { x = 223, y = 96, z = 2 },
 
+        -- Tier 2 (Blue Moon)
+        TIER2_1 = { x = 29,  y = 72, z = 2 },
+        TIER2_2 = { x = 91,  y = 72, z = 2 },
+        TIER2_3 = { x = 149, y = 72, z = 2 },
+        TIER2_4 = { x = 211, y = 72, z = 2 },
+
+        -- Tier 3 (Blue Moon)
+        TIER3_1 = { x = 57,  y = 56, z = 2 },
+        TIER3_2 = { x = 183, y = 56, z = 2 },
     }
 }
 

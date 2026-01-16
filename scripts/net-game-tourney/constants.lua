@@ -31,6 +31,53 @@ local CONSTANTS = {
             grid_texture=ui_element_paths.."red-orange-bn4/grid.png",
         },
     },
+
+    progress_bar_path = {
+        bottom_tier = {
+            texture = ui_element_paths.."progress-bar-base/bottom-tier.png",
+            anim = ui_element_paths.."progress-bar-base/bottom-tier.anim"
+        },
+        middle_tier = {
+            texture = ui_element_paths.."progress-bar-base/middle-tier.png",
+            anim = ui_element_paths.."progress-bar-base/middle-tier.anim",
+        },
+        top_tier = {    
+            texture = ui_element_paths.."progress-bar-base/top-tier.png",
+            anim = ui_element_paths.."progress-bar-base/top-tier.anim",
+        },
+    },
+
+    progress_bar_overlay_path = {
+        blue_moon = {
+            bottom_tier = {
+                texture = ui_element_paths.."progress-bar-overlays/blue-moon/bottom-tier.png",
+                anim = ui_element_paths.."progress-bar-overlays/blue-moon/bottom-tier.anim"
+            },
+            middle_tier = {
+                texture = ui_element_paths.."progress-bar-overlays/blue-moon/middle-tier.png",
+                anim = ui_element_paths.."progress-bar-overlays/blue-moon/middle-tier.anim",
+            },
+            top_tier = {    
+                texture = ui_element_paths.."progress-bar-overlays/blue-moon/top-tier.png",
+                anim = ui_element_paths.."progress-bar-overlays/blue-moon/top-tier.anim",
+            },
+    },
+        none = {
+            bottom_tier = {
+                texture = ui_element_paths.."progress-bar-overlays/none/bottom-tier.png",
+                anim = ui_element_paths.."progress-bar-overlays/none/bottom-tier.anim"
+            },
+            middle_tier = {
+                texture = ui_element_paths.."progress-bar-overlays/none/middle-tier.png",
+                anim = ui_element_paths.."progress-bar-overlays/none/middle-tier.anim",
+            },
+            top_tier = {    
+                texture = ui_element_paths.."progress-bar-overlays/none/top-tier.png",
+                anim = ui_element_paths.."progress-bar-overlays/none/top-tier.anim",
+            },
+        },
+    },
+
     -- Bracket/Tourney Path paths
     bracket_bm_bn4 = ui_element_paths.."bracket-bm.png",
     bracket_rs_bn4 = ui_element_paths.."bracket-rs.png",
