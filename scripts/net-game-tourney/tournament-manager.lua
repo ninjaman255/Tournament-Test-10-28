@@ -61,8 +61,8 @@ function TournamentManager.create_single_player_tournament(player_id, board_id, 
             return nil
         end
         
-        -- Add 7 random NPCs
-        local npcs = tournament_npcs.get_random_npcs(7)
+        -- Add 7 unique random NPCs for this tournament
+        local npcs = tournament_npcs.get_unique_random_npcs(tournament_id, 7)
         local npc_count = 0
         for _, npc in ipairs(npcs) do
             if TournamentCore.add_participant(tournament_id, npc) then
@@ -70,7 +70,7 @@ function TournamentManager.create_single_player_tournament(player_id, board_id, 
             end
         end
         
-        print(string.format("[Manager] Added %d NPCs to tournament %d", npc_count, tournament_id))
+        print(string.format("[Manager] Added %d unique NPCs to tournament %d", npc_count, tournament_id))
         
         -- Initialize tournament
         if TournamentCore.initialize_tournament(tournament_id) then
@@ -318,10 +318,10 @@ Net:on("countdown_ended", function(event)
                             })
                         end
                         
-                        -- Add NPCs to fill remaining slots
+                        -- Add unique NPCs to fill remaining slots
                         local slots_needed = 8 - #queue.players
                         if slots_needed > 0 then
-                            local npcs = tournament_npcs.get_random_npcs(slots_needed)
+                            local npcs = tournament_npcs.get_unique_random_npcs(tournament_id, slots_needed)
                             for _, npc in ipairs(npcs) do
                                 TournamentCore.add_participant(tournament_id, npc)
                             end

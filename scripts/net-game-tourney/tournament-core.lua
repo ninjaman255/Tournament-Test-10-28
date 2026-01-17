@@ -531,6 +531,10 @@ function TournamentCore.cleanup_tournament(tournament_id)
         end
     end
     
+    -- Clean up used NPCs tracking
+    local tournament_npcs = require("scripts/net-game-tourney/tournament-npcs")
+    tournament_npcs.cleanup_tournament_npcs(tournament_id)
+    
     -- Remove tournament
     tournaments[tournament_id] = nil
     

@@ -121,11 +121,82 @@ tournament_npcs.NPC_LIST = {
     }
 }
 
--- Get random NPC
+-- Track used NPCs per tournament to avoid duplicates
+local used_npcs_by_tournament = {}
+
+-- Clean up used NPCs when tournament ends
+function tournament_npcs.cleanup_tournament_npcs(tournament_id)
+    used_npcs_by_tournament[tournament_id] = nil
+end
+
+-- Get unique random NPC (without duplicates for the same tournament)
+function tournament_npcs.get_unique_random_npc(tournament_id)
+    if not tournament_id then
+        return tournament_npcs.get_random_npc()
+    end
+    
+    -- Initialize used NPCs for this tournament if not exists
+    if not used_npcs_by_tournament[tournament_id] then
+        used_npcs_by_tournament[tournament_id] = {}
+    end
+    
+    local used_npcs = used_npcs_by_tournament[tournament_id]
+    local available_npcs = {}
+    
+    -- Find all NPCs not yet used in this tournament
+    for _, npc in ipairs(tournament_npcs.NPC_LIST) do
+        local already_used = false
+        for _, used_npc in ipairs(used_npcs) do
+            if used_npc.id == npc.id then
+                already_used = true
+                break
+            end
+        end
+        if not already_used then
+            table.insert(available_npcs, npc)
+        end
+    end
+    
+    -- If all NPCs are used, clear the list and start over (shouldn't happen with 19 NPCs)
+    if #available_npcs == 0 then
+        print("[NPCs] All NPCs used for tournament " .. tournament_id .. ", resetting list")
+        used_npcs_by_tournament[tournament_id] = {}
+        available_npcs = tournament_npcs.NPC_LIST
+    end
+    
+    -- Select random NPC from available ones
+    local index = math.random(1, #available_npcs)
+    local selected_npc = available_npcs[index]
+    
+    -- Mark as used for this tournament
+    table.insert(used_npcs, selected_npc)
+    
+    return {
+        id = selected_npc.id,
+        name = selected_npc.name,
+        mugshot = selected_npc.mugshot,
+        weight = selected_npc.weight,
+        type = "npc"
+    }
+end
+
+-- Get multiple unique random NPCs for a tournament
+function tournament_npcs.get_unique_random_npcs(tournament_id, count)
+    local npcs = {}
+    
+    for i = 1, count do
+        local npc = tournament_npcs.get_unique_random_npc(tournament_id)
+        table.insert(npcs, npc)
+    end
+    
+    return npcs
+end
+
+-- Original functions (for backward compatibility)
 function tournament_npcs.get_random_npc()
     if #tournament_npcs.NPC_LIST == 0 then
         return {
-            id = "/server/assets/tourney/npc-navis-testing/airman/airman1.zip",
+            id = npc_path .. "airman/airman1.zip",
             name = "AirMan",
             mugshot = "/server/assets/tourney/npc-navis-testing/airman/mug.png",
             weight = 50,
@@ -145,7 +216,6 @@ function tournament_npcs.get_random_npc()
     }
 end
 
--- Get multiple random NPCs
 function tournament_npcs.get_random_npcs(count)
     local npcs = {}
     
