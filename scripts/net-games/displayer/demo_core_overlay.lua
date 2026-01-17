@@ -82,81 +82,81 @@ local function ids_for_player(player_id)
   }
 end
 
-local function create_core_displays(player_id)
-  local ids = ids_for_player(player_id)
-
-  -- 1) Hide default HUD
-  Displayer:hidePlayerHUD(player_id)
-
-  -- 2) Global timer display (top-left)
-  if not global_timer_created then
-    Displayer.TimerDisplay.createGlobalTimerDisplay("global_timer", POS_GLOBAL_TIMER_X, POS_GLOBAL_TIMER_Y, "default")
-    global_timer_created = true
-  end
-  Displayer.TimerDisplay.updateGlobalTimerDisplay("global_timer", global_timer_value)
-
-  -- 3) Marquee/news ticker (top-ish)
-  Displayer.Text.drawMarqueeText(
-    player_id,
-    ids.marquee_id,
-    "Welcome! Sprite list will appear in 3 seconds!",
-    30,
-    "THICK",
-    1.0,
-    100,
-    "slow",
-    {
-      x = 10, y = 25, width = 220, height = 15,
-      padding_x = 8, padding_y = 2
-    }
-  )
-
-  -- 4) Player timer display
-  Displayer.TimerDisplay.createPlayerTimerDisplay(player_id, ids.player_timer_id, POS_PLAYER_TIMER_X, POS_PLAYER_TIMER_Y, "default")
-  Displayer.TimerDisplay.updatePlayerTimerDisplay(player_id, ids.player_timer_id, 0)
-
-  -- 5) Mission countdown display
-  Displayer.TimerDisplay.createPlayerCountdownDisplay(player_id, ids.mission_countdown_id, POS_MISSION_TIMER_X, POS_MISSION_TIMER_Y, "default")
-  Displayer.TimerDisplay.updatePlayerCountdownDisplay(player_id, ids.mission_countdown_id, MISSION_COUNTDOWN_START)
-
-  -- 6) Labels for timers
-  Displayer.Text.drawText(player_id, ids.label_play_id, "PLAY TIME", POS_LABEL_PLAY_X, POS_LABEL_PLAY_Y, 100, "THICK", 0.7)
-  Displayer.Text.drawText(player_id, ids.label_mission_id, "MISSION TIMER", POS_LABEL_MISSION_X, POS_LABEL_MISSION_Y, 100, "THICK", 0.7)
-
-  -- 7) "Sprite list in: 3" countdown text (temporary)
-  Displayer.Text.drawText(
-    player_id,
-    ids.sprite_countdown_text_id,
-    "Sprite list in: 3",
-    POS_SPRITE_COUNTDOWN_X,
-    POS_SPRITE_COUNTDOWN_Y,
-    100,
-    "THICK",
-    0.7
-  )
-
-  -- 8) Debug text
-  Displayer.Text.drawText(player_id, ids.debug_id, "DEBUG: Display working", POS_DEBUG_X, POS_DEBUG_Y, 100, "THICK", 0.7)
-
-  -- player state
-  player_data[player_id] = {
-    ids = ids,
-
-    session_started = true,
-
-    player_timer_value = 0,
-    mission_countdown_value = MISSION_COUNTDOWN_START,
-    mission_countdown_running = true,
-    mission_complete_box_shown = false,
-
-    sprite_list_countdown_elapsed = 0,
-    sprite_list_countdown_done = false,
-
-    fullscreen_elapsed = 0,
-    fullscreen_created = false,
-    fullscreen_armed = false, -- becomes true once sprite-list countdown finishes
-  }
-end
+-- local function create_core_displays(player_id)
+--   local ids = ids_for_player(player_id)
+-- 
+--   -- 1) Hide default HUD
+--   Displayer:hidePlayerHUD(player_id)
+-- 
+--   -- 2) Global timer display (top-left)
+--   if not global_timer_created then
+--     Displayer.TimerDisplay.createGlobalTimerDisplay("global_timer", POS_GLOBAL_TIMER_X, POS_GLOBAL_TIMER_Y, "default")
+--     global_timer_created = true
+--   end
+--   Displayer.TimerDisplay.updateGlobalTimerDisplay("global_timer", global_timer_value)
+-- 
+--   -- 3) Marquee/news ticker (top-ish)
+--   Displayer.Text.drawMarqueeText(
+--     player_id,
+--     ids.marquee_id,
+--     "Welcome! Sprite list will appear in 3 seconds!",
+--     30,
+--     "THICK",
+--     1.0,
+--     100,
+--     "slow",
+--     {
+--       x = 10, y = 25, width = 220, height = 15,
+--       padding_x = 8, padding_y = 2
+--     }
+--   )
+-- 
+--   -- 4) Player timer display
+--   Displayer.TimerDisplay.createPlayerTimerDisplay(player_id, ids.player_timer_id, POS_PLAYER_TIMER_X, POS_PLAYER_TIMER_Y, "default")
+--   Displayer.TimerDisplay.updatePlayerTimerDisplay(player_id, ids.player_timer_id, 0)
+-- 
+--   -- 5) Mission countdown display
+--   Displayer.TimerDisplay.createPlayerCountdownDisplay(player_id, ids.mission_countdown_id, POS_MISSION_TIMER_X, POS_MISSION_TIMER_Y, "default")
+--   Displayer.TimerDisplay.updatePlayerCountdownDisplay(player_id, ids.mission_countdown_id, MISSION_COUNTDOWN_START)
+-- 
+--   -- 6) Labels for timers
+--   Displayer.Text.drawText(player_id, ids.label_play_id, "PLAY TIME", POS_LABEL_PLAY_X, POS_LABEL_PLAY_Y, 100, "THICK", 0.7)
+--   Displayer.Text.drawText(player_id, ids.label_mission_id, "MISSION TIMER", POS_LABEL_MISSION_X, POS_LABEL_MISSION_Y, 100, "THICK", 0.7)
+-- 
+--   -- 7) "Sprite list in: 3" countdown text (temporary)
+--   Displayer.Text.drawText(
+--     player_id,
+--     ids.sprite_countdown_text_id,
+--     "Sprite list in: 3",
+--     POS_SPRITE_COUNTDOWN_X,
+--     POS_SPRITE_COUNTDOWN_Y,
+--     100,
+--     "THICK",
+--     0.7
+--   )
+-- 
+--   -- 8) Debug text
+--   Displayer.Text.drawText(player_id, ids.debug_id, "DEBUG: Display working", POS_DEBUG_X, POS_DEBUG_Y, 100, "THICK", 0.7)
+-- 
+--   -- player state
+--   player_data[player_id] = {
+--     ids = ids,
+-- 
+--     session_started = true,
+-- 
+--     player_timer_value = 0,
+--     mission_countdown_value = MISSION_COUNTDOWN_START,
+--     mission_countdown_running = true,
+--     mission_complete_box_shown = false,
+-- 
+--     sprite_list_countdown_elapsed = 0,
+--     sprite_list_countdown_done = false,
+-- 
+--     fullscreen_elapsed = 0,
+--     fullscreen_created = false,
+--     fullscreen_armed = false, -- becomes true once sprite-list countdown finishes
+--   }
+-- end
 
 local function remove_core_displays(player_id)
   local data = player_data[player_id]
@@ -241,7 +241,7 @@ Net:on("player_join", function(event)
     return
   end
 
-  create_core_displays(player_id)
+  -- create_core_displays(player_id)
 end)
 
 
@@ -249,7 +249,7 @@ Net:on("player_leave", function(event)
   local player_id = event.player_id
   print("[demo_core_overlay] player_leave " .. player_id)
 
-  remove_core_displays(player_id)
+  -- remove_core_displays(player_id)
 end)
 
 Net:on("tick", function(event)
