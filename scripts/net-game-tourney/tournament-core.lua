@@ -147,20 +147,11 @@ function TournamentCore.initialize_positions(tournament_id)
     local tournament = tournaments[tournament_id]
     if not tournament then return end
     
+    local ui_positions = require("scripts/net-game-tourney/ui-pos")
+    local base_positions = ui_positions.get_mugshot_positions(0)
+    
     tournament.ui_state.positions = {}
     tournament.ui_state.round = 0
-    
-    -- Initial positions (all at bottom) - ROUND 0
-    local base_positions = {
-        {x = 8, y = 132, z = 3},
-        {x = 34, y = 132, z = 3},
-        {x = 64, y = 132, z = 3},
-        {x = 90, y = 132, z = 3},
-        {x = 128, y = 132, z = 3},
-        {x = 154, y = 132, z = 3},
-        {x = 184, y = 132, z = 3},
-        {x = 210, y = 132, z = 3}
-    }
     
     for i = 1, #tournament.participants do
         tournament.ui_state.positions[i] = {
@@ -177,6 +168,7 @@ function TournamentCore.calculate_round_positions(tournament_id, round)
     local tournament = tournaments[tournament_id]
     if not tournament then return nil end
     
+    local ui_positions = require("scripts/net-game-tourney/ui-pos")
     local new_positions = {}
     
     -- Start with current positions
@@ -191,16 +183,7 @@ function TournamentCore.calculate_round_positions(tournament_id, round)
     
     if round == 0 then
         -- Round 0: All participants at initial positions
-        local base_positions = {
-            {x = 8, y = 132, z = 3},
-            {x = 34, y = 132, z = 3},
-            {x = 64, y = 132, z = 3},
-            {x = 90, y = 132, z = 3},
-            {x = 128, y = 132, z = 3},
-            {x = 154, y = 132, z = 3},
-            {x = 184, y = 132, z = 3},
-            {x = 210, y = 132, z = 3}
-        }
+        local base_positions = ui_positions.get_mugshot_positions(0)
         
         for i = 1, #tournament.participants do
             new_positions[i] = {
@@ -213,12 +196,7 @@ function TournamentCore.calculate_round_positions(tournament_id, round)
         
     elseif round == 1 then
         -- Move winners to round 1 positions
-        local round1_positions = {
-            {x = 22, y = 82, z = 3},  -- Match 1 winner
-            {x = 78, y = 82, z = 3},  -- Match 2 winner
-            {x = 142, y = 82, z = 3}, -- Match 3 winner
-            {x = 198, y = 82, z = 3}  -- Match 4 winner
-        }
+        local round1_positions = ui_positions.get_mugshot_positions(1)
         
         -- Track which positions have been updated
         local updated_positions = {}
@@ -245,10 +223,7 @@ function TournamentCore.calculate_round_positions(tournament_id, round)
         
     elseif round == 2 then
         -- Move winners to round 2 positions
-        local round2_positions = {
-            {x = 50, y = 56, z = 3},  -- Match 1 winner
-            {x = 170, y = 56, z = 3}  -- Match 2 winner
-        }
+        local round2_positions = ui_positions.get_mugshot_positions(2)
         
         local updated_positions = {}
         
@@ -273,7 +248,7 @@ function TournamentCore.calculate_round_positions(tournament_id, round)
         
     elseif round == 3 then
         -- Move champion to top
-        local champion_position = {x = 110, y = 34, z = 3}
+        local round3_positions = ui_positions.get_mugshot_positions(3)
         
         for _, match in ipairs(tournament.matches.round3 or {}) do
             if match.completed and match.winner then
@@ -283,9 +258,9 @@ function TournamentCore.calculate_round_positions(tournament_id, round)
                     if pos.participant_id == champion_id then
                         new_positions[j] = {
                             participant_id = champion_id,
-                            x = champion_position.x,
-                            y = champion_position.y,
-                            z = champion_position.z
+                            x = round3_positions[1].x,
+                            y = round3_positions[1].y,
+                            z = round3_positions[1].z
                         }
                         break
                     end
