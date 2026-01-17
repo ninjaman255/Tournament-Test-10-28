@@ -14,6 +14,8 @@ local constants = require("scripts/net-game-tourney/tournament-constants")
 
 local waiting_queues = {} -- board_id -> {players = {}, host_id, area_id}
 local active_interactions = {} -- Prevent duplicate interactions
+-- Track all players in waiting queues across all boards
+local all_queued_players = {} -- player_id -> board_id
 
 -- Initialize the tournament system
 function TournamentManager.init()
@@ -93,6 +95,15 @@ function TournamentManager.start_tournament(tournament_id)
     end)
 end
 
+-- Remove player from all queue tracking
+local function remove_player_from_queue_tracking(player_id)
+    -- Remove from global queue tracking
+    all_queued_players[player_id] = nil
+    
+    -- Also remove from active interactions
+    active_interactions[player_id] = nil
+end
+
 -- Handle board interaction
 function TournamentManager.handle_board_interaction(player_id, board_object, area_id)
     return async(function()
@@ -106,6 +117,13 @@ function TournamentManager.handle_board_interaction(player_id, board_object, are
         -- Check if player is already in a tournament
         if TournamentCore.is_player_in_tournament(player_id) then
             Net.message_player(player_id, "You are already in a tournament!")
+            active_interactions[player_id] = nil
+            return
+        end
+        
+        -- Check if player is already in any waiting queue
+        if all_queued_players[player_id] then
+            Net.message_player(player_id, "You are already in a tournament queue!")
             active_interactions[player_id] = nil
             return
         end
@@ -134,6 +152,9 @@ function TournamentManager.handle_board_interaction(player_id, board_object, are
             }
             queue = waiting_queues[board_id]
             
+            -- Track player in global queue
+            all_queued_players[player_id] = board_id
+            
             print(string.format("[Manager] Created new queue for board %s with player %s", 
                   board_id, player_id))
         else
@@ -148,6 +169,10 @@ function TournamentManager.handle_board_interaction(player_id, board_object, are
             
             -- Add player to queue
             table.insert(queue.players, player_id)
+            
+            -- Track player in global queue
+            all_queued_players[player_id] = board_id
+            
             print(string.format("[Manager] Added player %s to queue for board %s (total: %d)", 
                   player_id, board_id, #queue.players))
         end
@@ -180,11 +205,17 @@ function TournamentManager.handle_board_interaction(player_id, board_object, are
                 ))
                 
                 if tournament_id then
+                    -- Remove players from queue tracking
+                    for _, pid in ipairs(queue.players) do
+                        remove_player_from_queue_tracking(pid)
+                    end
                     waiting_queues[board_id] = nil
                     await(TournamentManager.start_tournament(tournament_id))
                 end
                 
             else -- Cancel
+                -- Remove player from tracking
+                remove_player_from_queue_tracking(player_id)
                 waiting_queues[board_id] = nil
                 Net.message_player(player_id, "Cancelled.")
             end
@@ -217,6 +248,7 @@ function TournamentManager.handle_board_interaction(player_id, board_object, are
                 for i, pid in ipairs(queue.players) do
                     if pid == player_id then
                         table.remove(queue.players, i)
+                        remove_player_from_queue_tracking(player_id)
                         break
                     end
                 end
@@ -259,6 +291,10 @@ function TournamentManager.handle_board_interaction(player_id, board_object, are
                 
                 -- Initialize and start
                 if TournamentCore.initialize_tournament(tournament_id) then
+                    -- Remove players from queue tracking
+                    for _, pid in ipairs(queue.players) do
+                        remove_player_from_queue_tracking(pid)
+                    end
                     -- Clean up queue
                     waiting_queues[board_id] = nil
                     
@@ -329,6 +365,10 @@ Net:on("countdown_ended", function(event)
                         
                         -- Initialize and start
                         if TournamentCore.initialize_tournament(tournament_id) then
+                            -- Remove players from queue tracking
+                            for _, pid in ipairs(queue.players) do
+                                remove_player_from_queue_tracking(pid)
+                            end
                             waiting_queues[board_id] = nil
                             await(TournamentManager.start_tournament(tournament_id))
                         else
@@ -342,6 +382,10 @@ Net:on("countdown_ended", function(event)
                     queue.countdown_end = os.time() + 10
                     
                 else -- Cancel
+                    -- Remove players from queue tracking
+                    for _, pid in ipairs(queue.players) do
+                        remove_player_from_queue_tracking(pid)
+                    end
                     waiting_queues[board_id] = nil
                     Net.message_player(player_id, "Cancelled.")
                 end
@@ -372,6 +416,10 @@ function TournamentManager.handle_player_disconnect(player_id)
         end
         
         if #new_players == 0 then
+            -- Remove all players from tracking
+            for _, pid in ipairs(queue.players) do
+                remove_player_from_queue_tracking(pid)
+            end
             waiting_queues[board_id] = nil
         else
             queue.players = new_players
@@ -379,6 +427,8 @@ function TournamentManager.handle_player_disconnect(player_id)
             if queue.host_id == player_id and #new_players > 0 then
                 queue.host_id = new_players[1]
             end
+            -- Remove disconnected player from tracking
+            remove_player_from_queue_tracking(player_id)
         end
     end
     
@@ -402,6 +452,10 @@ function TournamentManager.cleanup_expired_queues()
     for board_id, queue in pairs(waiting_queues) do
         -- Clean up queues older than 5 minutes or countdown expired
         if now - queue.created_time > 300 or (queue.countdown_end and now > queue.countdown_end) then
+            -- Remove all players from tracking
+            for _, pid in ipairs(queue.players) do
+                remove_player_from_queue_tracking(pid)
+            end
             waiting_queues[board_id] = nil
             cleaned = cleaned + 1
             print("[Manager] Cleaned expired queue for board " .. board_id)

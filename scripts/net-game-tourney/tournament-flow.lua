@@ -48,7 +48,7 @@ function TournamentFlow.run_tournament(tournament_id)
             await(TournamentFlow.show_board_to_all(tournament_id, "current"))
             await(Async.sleep(1.5))
             
-            -- Move winners to their new positions
+            -- Move winners to their new positions one by one
             await(TournamentFlow.animate_winner_movement(tournament_id, round))
             await(Async.sleep(1.0))
             
@@ -101,18 +101,100 @@ function TournamentFlow.animate_winner_movement(tournament_id, round)
         
         if not matches then return end
         
-        -- Update all positions at once for this round
-        TournamentCore.update_positions(tournament_id, round)
+        -- Get new positions for this round
+        local new_positions = TournamentCore.calculate_round_positions(tournament_id, round)
+        if not new_positions then
+            print("[Flow] Failed to calculate new positions for round " .. round)
+            return
+        end
         
-        -- Update UI for all players
-        for _, participant in ipairs(tournament.participants) do
-            if participant.type == "player" and Net.is_player(participant.id) then
-                TournamentUI.cleanup_participants(participant.id)
-                TournamentUI.show_participants(participant.id, tournament)
+        -- Create a map of participant_id to new position for easy lookup
+        local new_positions_map = {}
+        for _, pos in ipairs(new_positions) do
+            new_positions_map[pos.participant_id] = pos
+        end
+        
+        -- Track which participants are winners and need to be moved
+        local winners_to_move = {}
+        
+        for _, match in ipairs(matches) do
+            if match.completed and match.winner then
+                local winner_id = match.winner.id
+                local new_pos = new_positions_map[winner_id]
+                if new_pos then
+                    -- Find current position in UI state
+                    local current_pos = nil
+                    for _, pos in ipairs(tournament.ui_state.positions) do
+                        if pos.participant_id == winner_id then
+                            current_pos = pos
+                            break
+                        end
+                    end
+                    
+                    if current_pos then
+                        -- Only add if position actually changed
+                        if current_pos.x ~= new_pos.x or current_pos.y ~= new_pos.y then
+                            table.insert(winners_to_move, {
+                                winner_id = winner_id,
+                                current_x = current_pos.x,
+                                current_y = current_pos.y,
+                                current_z = current_pos.z,
+                                new_x = new_pos.x,
+                                new_y = new_pos.y,
+                                new_z = new_pos.z
+                            })
+                        end
+                    end
+                end
             end
         end
         
-        print(string.format("[Flow] Animated winner movement for round %d", round))
+        print(string.format("[Flow] Moving %d winners for round %d", #winners_to_move, round))
+        
+        -- Move winners one by one
+        for i, winner_move in ipairs(winners_to_move) do
+            -- Update the tournament's UI state for this winner
+            for j, pos in ipairs(tournament.ui_state.positions) do
+                if pos.participant_id == winner_move.winner_id then
+                    tournament.ui_state.positions[j] = {
+                        participant_id = winner_move.winner_id,
+                        x = winner_move.new_x,
+                        y = winner_move.new_y,
+                        z = winner_move.new_z
+                    }
+                    break
+                end
+            end
+            
+            -- Update UI for all players to show the moved winner
+            for _, participant in ipairs(tournament.participants) do
+                if participant.type == "player" and Net.is_player(participant.id) then
+                    TournamentUI.cleanup_participants(participant.id)
+                    TournamentUI.show_participants(participant.id, tournament)
+                end
+            end
+            
+            -- Announce the winner's movement
+            local winner_name = ""
+            for _, p in ipairs(tournament.participants) do
+                if p.id == winner_move.winner_id then
+                    winner_name = p.name
+                    break
+                end
+            end
+            
+            print(string.format("[Flow] Moved winner %d/%d: %s", i, #winners_to_move, winner_name))
+            
+            -- Wait before moving the next winner (except for the last one)
+            if i < #winners_to_move then
+                await(Async.sleep(0.5)) -- Half second delay between movements
+            end
+        end
+        
+        -- Update the round in UI state
+        tournament.ui_state.round = round
+        
+        print(string.format("[Flow] Completed animated winner movement for round %d", round))
     end)
 end
 

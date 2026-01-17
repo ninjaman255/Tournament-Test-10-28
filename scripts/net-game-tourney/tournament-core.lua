@@ -45,6 +45,16 @@ function TournamentCore.create_tournament(config)
     return tournament_id
 end
 
+-- Check if participant already exists in tournament (by ID)
+local function participant_exists_in_tournament(tournament, participant_id)
+    for _, participant in ipairs(tournament.participants) do
+        if participant.id == participant_id then
+            return true
+        end
+    end
+    return false
+end
+
 -- Add a participant
 function TournamentCore.add_participant(tournament_id, participant)
     local tournament = tournaments[tournament_id]
@@ -58,7 +68,13 @@ function TournamentCore.add_participant(tournament_id, participant)
         return false
     end
     
-    -- For real players, check if already in a tournament
+    -- Check if participant already exists in this tournament
+    if participant_exists_in_tournament(tournament, participant.id) then
+        print("[Core] Participant already in tournament: " .. participant.id)
+        return false
+    end
+    
+    -- For real players, check if already in ANY tournament
     if participant.type == "player" and player_tournaments[participant.id] then
         print("[Core] Player already in tournament: " .. participant.id)
         return false
