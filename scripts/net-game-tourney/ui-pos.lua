@@ -81,4 +81,19 @@ function UIPositions.get_progress_bar_positions(tier)
     return UIPositions.progress_bar_positions[tier_key] or {}
 end
 
+-- NEW: Helper function to get progress bar index for a winner based on match index and round
+function UIPositions.get_progress_bar_index_for_winner(round, match_index)
+    if round == 1 then
+        -- Round 1: winners get odd-numbered progress bars (1, 3, 5, 7)
+        return (match_index * 2) - 1
+    elseif round == 2 then
+        -- Round 2: winners get odd-numbered progress bars (1, 3)
+        return (match_index * 2) - 1
+    elseif round == 3 then
+        -- Round 3: champion gets position 1
+        return 1
+    end
+    return 1
+end
+
 return UIPositions

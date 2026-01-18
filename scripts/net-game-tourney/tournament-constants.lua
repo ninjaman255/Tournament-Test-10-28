@@ -79,11 +79,11 @@ local constants = {
 
     greyscale_properties = 
     {
-        color_mode = 1,
-        r = 84,
-        g = 84,
-        b = 84,
-        a = 255
+        color_mode = 2,
+        r = 128,
+        g = 128,
+        b = 128,
+        a = 200
     }
 }
 

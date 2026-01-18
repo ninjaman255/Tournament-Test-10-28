@@ -8,6 +8,41 @@ local games = require("scripts/net-games/framework")
 -- Track greyscale participants per player AND per tournament
 local greyscale_tracking = {} -- tournament_id -> {player_id -> {participant_id = true}}
 
+-- Track progress bars per participant per round
+local progress_bar_tracking = {} -- tournament_id -> {player_id -> {participant_id -> {tier1 = true, tier2 = true, tier3 = true}}}
+
+-- Clear progress bar tracking for a player in a tournament
+function TournamentUI.clear_progress_bar_tracking(player_id, tournament_id)
+    if not tournament_id then return end
+    if progress_bar_tracking[tournament_id] then
+        progress_bar_tracking[tournament_id][player_id] = nil
+    end
+end
+
+-- Mark a progress bar tier as spawned for a participant
+function TournamentUI.mark_progress_bar_spawned(tournament_id, player_id, participant_id, tier)
+    if not tournament_id then return end
+    if not progress_bar_tracking[tournament_id] then
+        progress_bar_tracking[tournament_id] = {}
+    end
+    if not progress_bar_tracking[tournament_id][player_id] then
+        progress_bar_tracking[tournament_id][player_id] = {}
+    end
+    if not progress_bar_tracking[tournament_id][player_id][participant_id] then
+        progress_bar_tracking[tournament_id][player_id][participant_id] = {}
+    end
+    progress_bar_tracking[tournament_id][player_id][participant_id][tier] = true
+end
+
+-- Check if a progress bar tier is already spawned for a participant
+function TournamentUI.has_progress_bar_tier(tournament_id, player_id, participant_id, tier)
+    if not tournament_id then return false end
+    return progress_bar_tracking[tournament_id] 
+           and progress_bar_tracking[tournament_id][player_id]
+           and progress_bar_tracking[tournament_id][player_id][participant_id]
+           and progress_bar_tracking[tournament_id][player_id][participant_id][tier]
+end
+
 -- Clear greyscale tracking for a player in a tournament
 function TournamentUI.clear_greyscale_tracking(player_id, tournament_id)
     if not tournament_id then return end
@@ -70,8 +105,8 @@ function TournamentUI.show_board(player_id, tournament_data, view_type)
         TournamentUI.show_current_participants(player_id, tournament_data)
     end
     
-    -- Show progress bars based on current round
-    TournamentUI.show_progress_bars(player_id, tournament_data.current_round)
+    -- Show progress bars based on current round and tournament state
+    TournamentUI.show_progress_bars_for_round(player_id, tournament_data)
     
     return true
 end
@@ -110,41 +145,9 @@ function TournamentUI.show_current_participants(player_id, tournament_data)
         if participant and participant.mugshot then
             TournamentUI.add_mugshot(player_id, i, participant.mugshot, position.x, position.y, position.z)
             
-            -- Apply greyscale if this participant was marked as greyscale in ANY previous round
-            -- Check tournament state to see if this participant has lost in any match
-            local should_be_greyscale = false
-            
-            -- Check all completed matches to see if this participant is a loser
-            for _, match in ipairs(tournament_data.matches.round1 or {}) do
-                if match.completed and match.loser and match.loser.id == participant.id then
-                    should_be_greyscale = true
-                    break
-                end
-            end
-            
-            if not should_be_greyscale and tournament_data.matches.round2 then
-                for _, match in ipairs(tournament_data.matches.round2) do
-                    if match.completed and match.loser and match.loser.id == participant.id then
-                        should_be_greyscale = true
-                        break
-                    end
-                end
-            end
-            
-            if not should_be_greyscale and tournament_data.matches.round3 then
-                for _, match in ipairs(tournament_data.matches.round3) do
-                    if match.completed and match.loser and match.loser.id == participant.id then
-                        should_be_greyscale = true
-                        break
-                    end
-                end
-            end
-            
-            -- Also check the tracking to ensure persistence
-            if should_be_greyscale or TournamentUI.is_greyscale(tournament_data.id, player_id, participant.id) then
+            -- Apply greyscale if this participant was marked as greyscale
+            if TournamentUI.is_greyscale(tournament_data.id, player_id, participant.id) then
                 games.update_ui_element("MUG_" .. i, player_id, constants.greyscale_properties)
-                -- Mark in tracking for future reference
-                TournamentUI.mark_greyscale(tournament_data.id, player_id, participant.id)
             end
         end
     end
@@ -265,27 +268,81 @@ function TournamentUI.add_mugshot(player_id, index, mugshot_texture, x, y, z)
         "UI", x, y, 2, 1, 1)
 end
 
--- Show progress bars
-function TournamentUI.show_progress_bars(player_id, round)
-    -- Tier 1 (always) - 8 positions
-    local bottom_positions = ui_positions.get_progress_bar_positions("bottom")
-    for i, pos in ipairs(bottom_positions) do
-        TournamentUI.add_progress_bar(player_id, "TIER1_" .. i, "bottom", pos.x, pos.y, pos.z, i)
+-- NEW: Show progress bars based on tournament round and state
+function TournamentUI.show_progress_bars_for_round(player_id, tournament_data)
+    local round = tournament_data.current_round or 0
+    
+    -- Round 0: No progress bars
+    if round == 0 then
+        return
     end
     
-    if round >= 2 then
-        -- Tier 2 - 4 positions
-        local middle_positions = ui_positions.get_progress_bar_positions("middle")
-        for i, pos in ipairs(middle_positions) do
-            TournamentUI.add_progress_bar(player_id, "TIER2_" .. i, "middle", pos.x, pos.y, pos.z, i)
+    -- For Round 1: Only show tier1 progress bars for winners
+    if round >= 1 and tournament_data.matches.round1 then
+        for match_index, match in ipairs(tournament_data.matches.round1) do
+            if match.completed and match.winner then
+                local winner = match.winner
+                -- Determine which bottom tier progress bar position to use based on match index
+                -- Match 1: positions 1,2 (use 1 for winner)
+                -- Match 2: positions 3,4 (use 3 for winner)
+                -- Match 3: positions 5,6 (use 5 for winner)
+                -- Match 4: positions 7,8 (use 7 for winner)
+                local tier1_index = (match_index * 2) - 1
+                
+                -- Only spawn if not already spawned
+                if not TournamentUI.has_progress_bar_tier(tournament_data.id, player_id, winner.id, "tier1") then
+                    local bottom_positions = ui_positions.get_progress_bar_positions("bottom")
+                    if bottom_positions[tier1_index] then
+                        TournamentUI.add_progress_bar(player_id, "TIER1_" .. tier1_index, "bottom", 
+                            bottom_positions[tier1_index].x, bottom_positions[tier1_index].y, 
+                            bottom_positions[tier1_index].z, tier1_index)
+                        TournamentUI.mark_progress_bar_spawned(tournament_data.id, player_id, winner.id, "tier1")
+                    end
+                end
+            end
         end
     end
     
-    if round >= 3 then
-        -- Tier 3 - 2 positions
-        local top_positions = ui_positions.get_progress_bar_positions("top")
-        for i, pos in ipairs(top_positions) do
-            TournamentUI.add_progress_bar(player_id, "TIER3_" .. i, "top", pos.x, pos.y, pos.z, i)
+    -- For Round 2: Show tier2 progress bars for winners, keep tier1 progress bars
+    if round >= 2 and tournament_data.matches.round2 then
+        for match_index, match in ipairs(tournament_data.matches.round2) do
+            if match.completed and match.winner then
+                local winner = match.winner
+                -- Determine which middle tier progress bar position to use based on match index
+                -- Match 1: positions 1,2 (use 1 for winner)
+                -- Match 2: positions 3,4 (use 3 for winner)
+                local tier2_index = (match_index * 2) - 1
+                
+                -- Only spawn if not already spawned
+                if not TournamentUI.has_progress_bar_tier(tournament_data.id, player_id, winner.id, "tier2") then
+                    local middle_positions = ui_positions.get_progress_bar_positions("middle")
+                    if middle_positions[tier2_index] then
+                        TournamentUI.add_progress_bar(player_id, "TIER2_" .. tier2_index, "middle", 
+                            middle_positions[tier2_index].x, middle_positions[tier2_index].y, 
+                            middle_positions[tier2_index].z, tier2_index)
+                        TournamentUI.mark_progress_bar_spawned(tournament_data.id, player_id, winner.id, "tier2")
+                    end
+                end
+            end
+        end
+    end
+    
+    -- For Round 3: Show tier3 progress bar for champion, keep all previous progress bars
+    if round >= 3 and tournament_data.matches.round3 and tournament_data.matches.round3[1] then
+        local final_match = tournament_data.matches.round3[1]
+        if final_match.completed and final_match.winner then
+            local champion = final_match.winner
+            
+            -- Only spawn if not already spawned
+            if not TournamentUI.has_progress_bar_tier(tournament_data.id, player_id, champion.id, "tier3") then
+                local top_positions = ui_positions.get_progress_bar_positions("top")
+                if top_positions[1] then
+                    TournamentUI.add_progress_bar(player_id, "TIER3_1", "top", 
+                        top_positions[1].x, top_positions[1].y, 
+                        top_positions[1].z, 1)
+                    TournamentUI.mark_progress_bar_spawned(tournament_data.id, player_id, champion.id, "tier3")
+                end
+            end
         end
     end
 end
@@ -339,6 +396,7 @@ function TournamentUI.cleanup(player_id, tournament_id)
     -- Clear greyscale tracking for this player in this tournament
     if tournament_id then
         TournamentUI.clear_greyscale_tracking(player_id, tournament_id)
+        TournamentUI.clear_progress_bar_tracking(player_id, tournament_id)
     end
     
     print("[UI] Cleaned UI for " .. player_id)
