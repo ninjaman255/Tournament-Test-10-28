@@ -226,14 +226,17 @@ function frame.set_cosmetic(cosmetic_id, player_id, texture, animation, state, x
     pcall(function() Net.provide_asset_for_player(player_id, animation) end)
 
     Net.player_alloc_sprite(player_id, cosmetic_id, { texture_path = texture, anim_path = animation, anim_state = state })
-    Net.player_draw_sprite(player_id, cosmetic_id, {
+    
+    local draw_params = {
       id = cosmetic_id .. "_obj",
       x = (x + 120 + p_xoffset) * 2,
       y = (y + 80 + p_yoffset) * 2,
       sx = 2,
       sy = 2,
       anim_state = state
-    })
+    }
+    
+    Net.player_draw_sprite(player_id, cosmetic_id, draw_params)
 
     last_position_cache[player_id] = last_position_cache[player_id] or {}
     local area_id = last_position_cache[player_id].area or Net.get_player_area(player_id)
@@ -379,7 +382,6 @@ function frame.add_ui_element(sprite_id, player_id, texture_path, animation_path
   -- and you'll get stale visuals (exactly your tourney bracket issue).
   local alloc_id = tostring(sprite_id) .. "|" .. tostring(texture_path) .. "|" .. tostring(animation_path or "")
 
-
   -- Always provide assets (safe) before alloc
   if animation_path ~= "" then pcall(function() Net.provide_asset_for_player(player_id, animation_path) end) end
   pcall(function() Net.provide_asset_for_player(player_id, texture_path) end)
@@ -388,26 +390,29 @@ function frame.add_ui_element(sprite_id, player_id, texture_path, animation_path
   Net.player_alloc_sprite(player_id, alloc_id, { texture_path = texture_path, anim_path = animation_path, anim_state = animation_state })
 
   -- Draw under the requested draw id (separate from alloc_id)
-  Net.player_draw_sprite(player_id, alloc_id, {
+  local draw_params = {
     id = sprite_id .. "_obj",
     x = X * 2,
     y = Y * 2,
-    z = Z,
     sx = scaleX,
-    sy = scaleY,
-    anim_state = animation_state
-  })
+    sy = scaleY
+  }
+  
+  if Z then draw_params.z = Z end
+  if animation_state and animation_state ~= "" then draw_params.anim_state = animation_state end
+  
+  Net.player_draw_sprite(player_id, alloc_id, draw_params)
 
   ui_cache[player_id][sprite_id] = {
     texture_path = texture_path,
     alloc_id = alloc_id,
     sprite_id = sprite_id,
-    x = X, y = Y, z = Z,
+    x = X, y = Y,
     scaleX = scaleX, scaleY = scaleY,
-    rotation = 0,
-    animation_state = animation_state,
-    opacity = 255
+    animation_state = animation_state
   }
+  
+  if Z then ui_cache[player_id][sprite_id].z = Z end
 
   return true
 end
@@ -429,22 +434,35 @@ function frame.update_ui_element(sprite_id, player_id, properties)
     draw.sy = properties.scale
     element.scaleX = properties.scale
     element.scaleY = properties.scale
+  elseif properties.sx then
+    draw.sx = properties.sx
+    element.scaleX = properties.sx
+  elseif properties.sy then
+    draw.sy = properties.sy
+    element.scaleY = properties.sy
   end
 
-  if properties.rotation then
-    draw.ro = properties.rotation
-    element.rotation = properties.rotation
+  if properties.rotation or properties.ro then
+    local rotation = properties.rotation or properties.ro
+    draw.ro = rotation
+    element.rotation = rotation
   end
 
-  if properties.opacity then
-    draw.opacity = properties.opacity
-    element.opacity = properties.opacity
+  if properties.opacity or properties.a then
+    local opacity = properties.opacity or properties.a
+    draw.opacity = opacity
+    element.opacity = opacity
   end
 
   if properties.animation_state then
     draw.anim_state = properties.animation_state
     element.animation_state = properties.animation_state
   end
+
+  if properties.r then draw.r = properties.r; element.r = properties.r end
+  if properties.g then draw.g = properties.g; element.g = properties.g end
+  if properties.b then draw.b = properties.b; element.b = properties.b end
+  if properties.color_mode then draw.color_mode = properties.color_mode; element.color_mode = properties.color_mode end
 
   Net.player_draw_sprite(player_id, element.alloc_id, draw)
   return true
@@ -454,7 +472,10 @@ function frame.set_ui_animation(sprite_id, player_id, animation_state)
   if not (ui_cache[player_id] and ui_cache[player_id][sprite_id]) then return false end
   local element = ui_cache[player_id][sprite_id]
   element.animation_state = animation_state
-  Net.player_draw_sprite(player_id, element.alloc_id, { id = sprite_id .. "_obj", anim_state = animation_state })
+  Net.player_draw_sprite(player_id, element.alloc_id, { 
+    id = sprite_id .. "_obj", 
+    anim_state = animation_state 
+  })
   return true
 end
 
@@ -462,7 +483,12 @@ function frame.move_ui_element(sprite_id, player_id, X, Y, Z)
   if not (ui_cache[player_id] and ui_cache[player_id][sprite_id]) then return false end
   local element = ui_cache[player_id][sprite_id]
   element.x, element.y, element.z = X, Y, Z
-  Net.player_draw_sprite(player_id, element.alloc_id, { id = sprite_id .. "_obj", x = X * 2, y = Y * 2, z = Z })
+  Net.player_draw_sprite(player_id, element.alloc_id, { 
+    id = sprite_id .. "_obj", 
+    x = X * 2, 
+    y = Y * 2, 
+    z = Z 
+  })
   return true
 end
 
@@ -473,15 +499,29 @@ function frame.update_ui_position(sprite_id, player_id, X, Y, Z)
   element.y = Y
   element.z = Z or element.z
 
-  Net.player_draw_sprite(player_id, element.alloc_id, {
+  local draw_params = {
     id = sprite_id .. "_obj",
     x = X * 2,
     y = Y * 2,
-    z = element.z,
     sx = element.scaleX,
     sy = element.scaleY,
     anim_state = element.animation_state
-  })
+  }
+  
+  if element.z then draw_params.z = element.z end
+  if element.rotation then draw_params.ro = element.rotation end
+  if element.opacity then 
+    draw_params.opacity = element.opacity
+    draw_params.a = element.opacity
+  end
+  if element.r then draw_params.r = element.r end
+  if element.g then draw_params.g = element.g end
+  if element.b then draw_params.b = element.b end
+  if element.color_mode then draw_params.color_mode = element.color_mode end
+  if element.ox then draw_params.ox = element.ox end
+  if element.oy then draw_params.oy = element.oy end
+
+  Net.player_draw_sprite(player_id, element.alloc_id, draw_params)
   return true
 end
 
@@ -657,15 +697,18 @@ function frame.spawn_cursor(cursor_id, player_id, options)
       anim_state = state
     })
 
-    Net.player_draw_sprite(player_id, cursor_id, {
+    local draw_params = {
       id = cursor_id .. "_obj",
       x = selection.x * 2,
       y = selection.y * 2,
-      z = selection.z,
       sx = 2,
-      sy = 2,
-      anim_state = state
-    })
+      sy = 2
+    }
+    
+    if selection.z then draw_params.z = selection.z end
+    if state and state ~= "" then draw_params.anim_state = state end
+
+    Net.player_draw_sprite(player_id, cursor_id, draw_params)
 
     cursor_cache[player_id].sprites = cursor_cache[player_id].sprites or {}
     cursor_cache[player_id].current = 1

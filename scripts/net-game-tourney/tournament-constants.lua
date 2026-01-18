@@ -76,6 +76,15 @@ local constants = {
     
     -- NPC path
     default_npc_path = "/server/assets/tourney/npc-navis-testing/",
+
+    greyscale_properties = 
+    {
+        color_mode = 1,
+        r = 84,
+        g = 84,
+        b = 84,
+        a = 255
+    }
 }
 
 return constants

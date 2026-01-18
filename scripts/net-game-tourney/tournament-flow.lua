@@ -48,8 +48,12 @@ function TournamentFlow.run_tournament(tournament_id)
             await(TournamentFlow.show_board_to_all(tournament_id, "current"))
             await(Async.sleep(1.5))
             
-            -- Move winners to their new positions one by one
-            await(TournamentFlow.animate_winner_movement(tournament_id, round))
+            -- FIRST: Grey-scale losers one by one with 1-second pauses
+            await(TournamentFlow.animate_loser_greyscale_one_by_one(tournament_id, round))
+            await(Async.sleep(1.0))
+            
+            -- THEN: Move winners to their new positions one by one
+            await(TournamentFlow.animate_winner_movement_one_by_one(tournament_id, round))
             await(Async.sleep(1.0))
             
             -- If not final round, handle continuation
@@ -77,7 +81,7 @@ function TournamentFlow.run_tournament(tournament_id)
                 TournamentCore.advance_round(tournament_id)
             else
                 -- Final round - show champion
-                await(TournamentFlow.announce_winner(tournament_id))
+                await(TournamentFlow.announce_winner_one_by_one(tournament_id))
                 await(Async.sleep(3.0))
                 await(TournamentFlow.hide_board_from_all(tournament_id))
             end
@@ -87,11 +91,78 @@ function TournamentFlow.run_tournament(tournament_id)
     end)
 end
 
--- Animate winner movement for a round
-function TournamentFlow.animate_winner_movement(tournament_id, round)
+-- NEW: Animate loser greyscaling one by one with 1-second pauses
+function TournamentFlow.animate_loser_greyscale_one_by_one(tournament_id, round)
     return async(function()
         local TournamentCore = require("scripts/net-game-tourney/tournament-core")
         local TournamentUI = require("scripts/net-game-tourney/tournament-ui")
+        local games = require("scripts/net-games/framework")
+        
+        local tournament = TournamentCore.get_tournament(tournament_id)
+        if not tournament then return end
+        
+        local round_key = round == 1 and "round1" or (round == 2 and "round2" or "round3")
+        local matches = tournament.matches[round_key]
+        
+        if not matches then return end
+        
+        print(string.format("[Flow] Animating loser greyscaling one by one for round %d", round))
+        
+        -- Collect all losers first
+        local losers_to_greyscale = {}
+        for match_index, match in ipairs(matches) do
+            if match.completed and match.loser then
+                table.insert(losers_to_greyscale, {
+                    match_index = match_index,
+                    loser_id = match.loser.id,
+                    loser_name = match.loser.name
+                })
+            end
+        end
+        
+        print(string.format("[Flow] Will greyscale %d losers one by one", #losers_to_greyscale))
+        
+        -- Process each loser one by one with 1-second pauses
+        for i, loser_info in ipairs(losers_to_greyscale) do
+            local loser_id = loser_info.loser_id
+            local loser_name = loser_info.loser_name
+            local match_index = loser_info.match_index
+            
+            print(string.format("[Flow] Greyscaling loser %d/%d: %s from match %d", 
+                  i, #losers_to_greyscale, loser_name, match_index))
+            
+            -- Apply greyscale to loser for all players in the tournament
+            for _, participant in ipairs(tournament.participants) do
+                if participant.type == "player" and Net.is_player(participant.id) then
+                    local player_id = participant.id
+                    
+                    -- Find the loser's current position in UI
+                    for j, pos in ipairs(tournament.ui_state.positions) do
+                        if pos.participant_id == loser_id then
+                            -- Apply greyscale effect
+                            games.update_ui_element("MUG_" .. j, player_id, constants.greyscale_properties)
+                            
+                            -- Mark as greyscale for tracking
+                            TournamentUI.mark_greyscale(tournament_id, player_id, loser_id)
+                            print(string.format("[Flow] Grey-scaled %s at position %d for player %s", 
+                                  loser_name, j, player_id))
+                            break
+                        end
+                    end
+                end
+            end
+        end
+        
+        print(string.format("[Flow] Completed loser greyscaling one by one for round %d", round))
+    end)
+end
+
+-- Animate winner movement for a round (after greyscaling) - also modified to be one by one
+function TournamentFlow.animate_winner_movement_one_by_one(tournament_id, round)
+    return async(function()
+        local TournamentCore = require("scripts/net-game-tourney/tournament-core")
+        local TournamentUI = require("scripts/net-game-tourney/tournament-ui")
+        local games = require("scripts/net-games/framework")
         
         local tournament = TournamentCore.get_tournament(tournament_id)
         if not tournament then return end
@@ -117,6 +188,7 @@ function TournamentFlow.animate_winner_movement(tournament_id, round)
         -- Track which participants are winners and need to be moved
         local winners_to_move = {}
         
+        -- Collect winners to move
         for _, match in ipairs(matches) do
             if match.completed and match.winner then
                 local winner_id = match.winner.id
@@ -136,6 +208,7 @@ function TournamentFlow.animate_winner_movement(tournament_id, round)
                         if current_pos.x ~= new_pos.x or current_pos.y ~= new_pos.y then
                             table.insert(winners_to_move, {
                                 winner_id = winner_id,
+                                winner_name = match.winner.name,
                                 current_x = current_pos.x,
                                 current_y = current_pos.y,
                                 current_z = current_pos.z,
@@ -149,9 +222,9 @@ function TournamentFlow.animate_winner_movement(tournament_id, round)
             end
         end
         
-        print(string.format("[Flow] Moving %d winners for round %d", #winners_to_move, round))
+        print(string.format("[Flow] Moving %d winners one by one for round %d", #winners_to_move, round))
         
-        -- Move winners one by one
+        -- Move winners one by one with 1-second pauses
         for i, winner_move in ipairs(winners_to_move) do
             -- Update the tournament's UI state for this winner
             for j, pos in ipairs(tournament.ui_state.positions) do
@@ -175,19 +248,12 @@ function TournamentFlow.animate_winner_movement(tournament_id, round)
             end
             
             -- Announce the winner's movement
-            local winner_name = ""
-            for _, p in ipairs(tournament.participants) do
-                if p.id == winner_move.winner_id then
-                    winner_name = p.name
-                    break
-                end
-            end
+            print(string.format("[Flow] Moved winner %d/%d: %s", i, #winners_to_move, winner_move.winner_name))
             
-            print(string.format("[Flow] Moved winner %d/%d: %s", i, #winners_to_move, winner_name))
-            
-            -- Wait before moving the next winner (except for the last one)
+            -- Wait 1 second before moving the next winner (except for the last one)
             if i < #winners_to_move then
-                await(Async.sleep(0.5)) -- Half second delay between movements
+                print("[Flow] Waiting 1 second before next winner movement...")
+                await(Async.sleep(1.0)) -- 1 second delay between movements
             end
         end
         
@@ -468,6 +534,7 @@ function TournamentFlow.show_board_to_all(tournament_id, view_type)
         local TournamentCore = require("scripts/net-game-tourney/tournament-core")
         local TournamentUI = require("scripts/net-game-tourney/tournament-ui")
         local constants = require("scripts/net-game-tourney/tournament-constants")
+        local games = require("scripts/net-games/framework")
         
         local tournament = TournamentCore.get_tournament(tournament_id)
         if not tournament then return end
@@ -510,6 +577,7 @@ function TournamentFlow.hide_board_from_all(tournament_id)
     return async(function()
         local TournamentCore = require("scripts/net-game-tourney/tournament-core")
         local TournamentUI = require("scripts/net-game-tourney/tournament-ui")
+        local games = require("scripts/net-games/framework")
         
         local tournament = TournamentCore.get_tournament(tournament_id)
         if not tournament then return end
@@ -521,7 +589,7 @@ function TournamentFlow.hide_board_from_all(tournament_id)
                 TournamentUI.show_transition(player_id, false, 0.3)
                 await(Async.sleep(0.3))
                 
-                TournamentUI.cleanup(player_id)
+                TournamentUI.cleanup(player_id, tournament_id)
                 
                 TournamentUI.show_transition(player_id, true, 0.3)
                 Net.unlock_player_input(player_id)
@@ -539,11 +607,12 @@ function TournamentFlow.hide_board_from_all(tournament_id)
     end)
 end
 
--- Announce winner
-function TournamentFlow.announce_winner(tournament_id)
+-- Announce winner with one-by-one greyscaling
+function TournamentFlow.announce_winner_one_by_one(tournament_id)
     return async(function()
         local TournamentCore = require("scripts/net-game-tourney/tournament-core")
         local TournamentUI = require("scripts/net-game-tourney/tournament-ui")
+        local games = require("scripts/net-games/framework")
         
         local tournament = TournamentCore.get_tournament(tournament_id)
         if not tournament then return end
@@ -557,6 +626,47 @@ function TournamentFlow.announce_winner(tournament_id)
         -- Show final champion board
         TournamentCore.update_positions(tournament_id, 3)
         await(TournamentFlow.show_board_to_all(tournament_id, "champion"))
+        
+        -- Wait a moment for board to display
+        await(Async.sleep(0.5))
+        
+        -- Apply greyscale to all non-champion participants one by one with 1-second pauses
+        local non_champions = {}
+        for _, participant in ipairs(tournament.participants) do
+            if participant.id ~= winner.id then
+                table.insert(non_champions, participant)
+            end
+        end
+        
+        print(string.format("[Flow] Greyscaling %d non-champions one by one", #non_champions))
+        
+        for i, participant in ipairs(non_champions) do
+            for _, p in ipairs(tournament.participants) do
+                if p.type == "player" and Net.is_player(p.id) then
+                    local player_id = p.id
+                    
+                    -- Find the participant's position in UI
+                    for j, pos in ipairs(tournament.ui_state.positions) do
+                        if pos.participant_id == participant.id then
+                            -- Apply greyscale effect
+                            games.update_ui_element("MUG_" .. j, player_id, constants.greyscale_properties)
+                            
+                            -- Mark as greyscale for tracking
+                            TournamentUI.mark_greyscale(tournament_id, player_id, participant.id)
+                            print(string.format("[Flow] Grey-scaled %s at position %d for player %s", 
+                                  participant.name, j, player_id))
+                            break
+                        end
+                    end
+                end
+            end
+            
+            -- Wait 1 second before greyscaling the next non-champion (except for the last one)
+            if i < #non_champions then
+                print("[Flow] Waiting 1 second before next greyscale...")
+                await(Async.sleep(1.0))
+            end
+        end
         
         -- Announce to all players
         for _, participant in ipairs(tournament.participants) do
@@ -580,7 +690,7 @@ function TournamentFlow.cleanup_tournament(tournament_id)
     -- Cleanup UI for players
     for _, participant in ipairs(tournament.participants) do
         if participant.type == "player" and Net.is_player(participant.id) then
-            TournamentUI.cleanup(participant.id)
+            TournamentUI.cleanup(participant.id, tournament_id)
             
             -- Restore area state if still saved
             local state = original_area_states[participant.id]

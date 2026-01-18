@@ -5,6 +5,37 @@ local constants = require("scripts/net-game-tourney/tournament-constants")
 local ui_positions = require("scripts/net-game-tourney/ui-pos")
 local games = require("scripts/net-games/framework")
 
+-- Track greyscale participants per player AND per tournament
+local greyscale_tracking = {} -- tournament_id -> {player_id -> {participant_id = true}}
+
+-- Clear greyscale tracking for a player in a tournament
+function TournamentUI.clear_greyscale_tracking(player_id, tournament_id)
+    if not tournament_id then return end
+    if greyscale_tracking[tournament_id] then
+        greyscale_tracking[tournament_id][player_id] = nil
+    end
+end
+
+-- Mark a participant as greyscale for a player in a tournament
+function TournamentUI.mark_greyscale(tournament_id, player_id, participant_id)
+    if not tournament_id then return end
+    if not greyscale_tracking[tournament_id] then
+        greyscale_tracking[tournament_id] = {}
+    end
+    if not greyscale_tracking[tournament_id][player_id] then
+        greyscale_tracking[tournament_id][player_id] = {}
+    end
+    greyscale_tracking[tournament_id][player_id][participant_id] = true
+end
+
+-- Check if a participant should be greyscale for a player
+function TournamentUI.is_greyscale(tournament_id, player_id, participant_id)
+    if not tournament_id then return false end
+    return greyscale_tracking[tournament_id] 
+           and greyscale_tracking[tournament_id][player_id]
+           and greyscale_tracking[tournament_id][player_id][participant_id]
+end
+
 -- Show tournament board to a player
 function TournamentUI.show_board(player_id, tournament_data, view_type)
     if not player_id or not tournament_data then
@@ -16,7 +47,7 @@ function TournamentUI.show_board(player_id, tournament_data, view_type)
           player_id, tournament_data.id, view_type or "default"))
     
     -- Cleanup any existing UI first
-    TournamentUI.cleanup(player_id)
+    TournamentUI.cleanup(player_id, tournament_data.id)
     
     -- Setup background
     TournamentUI.setup_background(player_id, tournament_data.config.theme)
@@ -78,6 +109,43 @@ function TournamentUI.show_current_participants(player_id, tournament_data)
         
         if participant and participant.mugshot then
             TournamentUI.add_mugshot(player_id, i, participant.mugshot, position.x, position.y, position.z)
+            
+            -- Apply greyscale if this participant was marked as greyscale in ANY previous round
+            -- Check tournament state to see if this participant has lost in any match
+            local should_be_greyscale = false
+            
+            -- Check all completed matches to see if this participant is a loser
+            for _, match in ipairs(tournament_data.matches.round1 or {}) do
+                if match.completed and match.loser and match.loser.id == participant.id then
+                    should_be_greyscale = true
+                    break
+                end
+            end
+            
+            if not should_be_greyscale and tournament_data.matches.round2 then
+                for _, match in ipairs(tournament_data.matches.round2) do
+                    if match.completed and match.loser and match.loser.id == participant.id then
+                        should_be_greyscale = true
+                        break
+                    end
+                end
+            end
+            
+            if not should_be_greyscale and tournament_data.matches.round3 then
+                for _, match in ipairs(tournament_data.matches.round3) do
+                    if match.completed and match.loser and match.loser.id == participant.id then
+                        should_be_greyscale = true
+                        break
+                    end
+                end
+            end
+            
+            -- Also check the tracking to ensure persistence
+            if should_be_greyscale or TournamentUI.is_greyscale(tournament_data.id, player_id, participant.id) then
+                games.update_ui_element("MUG_" .. i, player_id, constants.greyscale_properties)
+                -- Mark in tracking for future reference
+                TournamentUI.mark_greyscale(tournament_data.id, player_id, participant.id)
+            end
         end
     end
 end
@@ -102,6 +170,15 @@ function TournamentUI.show_champion_view(player_id, tournament_data)
             constants.crown_texture_path,
             constants.crown_anim_path,
             "ACTIVE", crown_pos.x, crown_pos.y, crown_pos.z)
+        
+        -- Apply greyscale to all non-champion participants
+        for i, p in ipairs(tournament_data.participants) do
+            if p.id ~= winner.id then
+                games.update_ui_element("MUG_" .. i, player_id, constants.greyscale_properties)
+                -- Mark as greyscale for tracking
+                TournamentUI.mark_greyscale(tournament_data.id, player_id, p.id)
+            end
+        end
         
         -- Announce champion
         Net.message_player(player_id, "CHAMPION: " .. winner.name)
@@ -244,7 +321,7 @@ function TournamentUI.cleanup_participants(player_id)
 end
 
 -- Cleanup all UI
-function TournamentUI.cleanup(player_id)
+function TournamentUI.cleanup(player_id, tournament_id)
     TournamentUI.cleanup_participants(player_id)
     
     local elements = {
@@ -257,6 +334,11 @@ function TournamentUI.cleanup(player_id)
     
     for _, element in ipairs(elements) do
         games.remove_ui_element(element, player_id)
+    end
+    
+    -- Clear greyscale tracking for this player in this tournament
+    if tournament_id then
+        TournamentUI.clear_greyscale_tracking(player_id, tournament_id)
     end
     
     print("[UI] Cleaned UI for " .. player_id)
