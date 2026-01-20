@@ -117,38 +117,50 @@ end
 
 -- Show progress bars for a specific round
 function TournamentUI.show_progress_bars_for_specific_round(player_id, tournament_data, round)
+    local ui_positions = require("scripts/net-game-tourney/ui-pos")
+    
     if round == 1 and tournament_data.matches.round1 then
         for match_index, match in ipairs(tournament_data.matches.round1) do
             if match.completed and match.winner then
-                local tier1_index = (match_index * 2) - 1
+                -- Determine which participant won
+                local winner_is_player1 = (match.winner.id == match.player1.id)
+                local progress_bar_index = ui_positions.get_progress_bar_index(1, match_index, winner_is_player1)
+                
                 local bottom_positions = ui_positions.get_progress_bar_positions("bottom")
-                if bottom_positions[tier1_index] then
-                    TournamentUI.add_progress_bar(player_id, "TIER1_" .. tier1_index, "bottom", 
-                        bottom_positions[tier1_index].x, bottom_positions[tier1_index].y, 
-                        bottom_positions[tier1_index].z, tier1_index)
+                if bottom_positions[progress_bar_index] then
+                    TournamentUI.add_progress_bar(player_id, "TIER1_" .. progress_bar_index, "bottom", 
+                        bottom_positions[progress_bar_index].x, bottom_positions[progress_bar_index].y, 
+                        bottom_positions[progress_bar_index].z, progress_bar_index)
                 end
             end
         end
     elseif round == 2 and tournament_data.matches.round2 then
         for match_index, match in ipairs(tournament_data.matches.round2) do
             if match.completed and match.winner then
-                local tier2_index = match_index  -- Fixed: Should be 1 or 2, not (match_index * 2) - 1
+                -- Determine which participant won
+                local winner_is_player1 = (match.winner.id == match.player1.id)
+                local progress_bar_index = ui_positions.get_progress_bar_index(2, match_index, winner_is_player1)
+                
                 local middle_positions = ui_positions.get_progress_bar_positions("middle")
-                if middle_positions[tier2_index] then
-                    TournamentUI.add_progress_bar(player_id, "TIER2_" .. tier2_index, "middle", 
-                        middle_positions[tier2_index].x, middle_positions[tier2_index].y, 
-                        middle_positions[tier2_index].z, tier2_index)
+                if middle_positions[progress_bar_index] then
+                    TournamentUI.add_progress_bar(player_id, "TIER2_" .. progress_bar_index, "middle", 
+                        middle_positions[progress_bar_index].x, middle_positions[progress_bar_index].y, 
+                        middle_positions[progress_bar_index].z, progress_bar_index)
                 end
             end
         end
     elseif round == 3 and tournament_data.matches.round3 and tournament_data.matches.round3[1] then
         local final_match = tournament_data.matches.round3[1]
         if final_match.completed and final_match.winner then
+            -- Determine which participant won
+            local winner_is_player1 = (final_match.winner.id == final_match.player1.id)
+            local progress_bar_index = ui_positions.get_progress_bar_index(3, 1, winner_is_player1)
+            
             local top_positions = ui_positions.get_progress_bar_positions("top")
-            if top_positions[1] then
-                TournamentUI.add_progress_bar(player_id, "TIER3_1", "top", 
-                    top_positions[1].x, top_positions[1].y, 
-                    top_positions[1].z, 1)
+            if top_positions[progress_bar_index] then
+                TournamentUI.add_progress_bar(player_id, "TIER3_" .. progress_bar_index, "top", 
+                    top_positions[progress_bar_index].x, top_positions[progress_bar_index].y, 
+                    top_positions[progress_bar_index].z, progress_bar_index)
             end
         end
     end
@@ -321,10 +333,13 @@ function TournamentUI.add_progress_bar(player_id, element_id, tier, x, y, z, pos
     -- Determine direction based on position index (odd = left, even = right)
     -- This ensures alternation starting with left
     if tier == "bottom" then
+        -- For bottom tier, we have 8 positions
         anim_state = (position_index % 2 == 1) and "L1_MOVE" or "R1_MOVE"
     elseif tier == "middle" then
+        -- For middle tier, we have 4 positions
         anim_state = (position_index % 2 == 1) and "L2_MOVE" or "R2_MOVE"
     elseif tier == "top" then
+        -- For top tier, we have 2 positions
         anim_state = (position_index % 2 == 1) and "L3_MOVE" or "R3_MOVE"
     end
     
@@ -332,6 +347,9 @@ function TournamentUI.add_progress_bar(player_id, element_id, tier, x, y, z, pos
         paths[tier .. "_tier"].texture,
         paths[tier .. "_tier"].anim,
         anim_state, x, y, z)
+    
+    print(string.format("[UI] Added progress bar %s at tier %s with anim %s (index: %d)", 
+          element_id, tier, anim_state, position_index))
 end
 
 -- Cleanup participants

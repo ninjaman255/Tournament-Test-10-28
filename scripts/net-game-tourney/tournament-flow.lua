@@ -322,19 +322,25 @@ function TournamentFlow.spawn_progress_bar_for_match(tournament_id, round, match
         
         local winner = match.winner
         
+        -- Determine which participant won (player1 or player2)
+        local winner_is_player1 = (winner.id == match.player1.id)
+        
+        -- Define progress_bar_index variable in outer scope
+        local progress_bar_index = 1
+        
         -- Determine which tier and index to use
         if round == 1 then
             -- Round 1: bottom tier progress bars
-            local tier1_index = (match_index * 2) - 1
+            progress_bar_index = ui_positions.get_progress_bar_index(1, match_index, winner_is_player1)
             
             -- Update UI for all players to show the progress bar
             for _, participant in ipairs(tournament.participants) do
                 if participant.type == "player" and Net.is_player(participant.id) then
                     local bottom_positions = ui_positions.get_progress_bar_positions("bottom")
-                    if bottom_positions[tier1_index] then
-                        TournamentUI.add_progress_bar(participant.id, "TIER1_" .. tier1_index, "bottom", 
-                            bottom_positions[tier1_index].x, bottom_positions[tier1_index].y, 
-                            bottom_positions[tier1_index].z, tier1_index)
+                    if bottom_positions[progress_bar_index] then
+                        TournamentUI.add_progress_bar(participant.id, "TIER1_" .. progress_bar_index, "bottom", 
+                            bottom_positions[progress_bar_index].x, bottom_positions[progress_bar_index].y, 
+                            bottom_positions[progress_bar_index].z, progress_bar_index)
                         TournamentUI.mark_progress_bar_spawned(tournament_id, participant.id, winner.id, "tier1")
                     end
                 end
@@ -342,16 +348,16 @@ function TournamentFlow.spawn_progress_bar_for_match(tournament_id, round, match
             
         elseif round == 2 then
             -- Round 2: middle tier progress bars
-            local tier2_index = match_index  -- Should be 1 or 2 for middle tier
+            progress_bar_index = ui_positions.get_progress_bar_index(2, match_index, winner_is_player1)
             
             -- Update UI for all players to show the progress bar
             for _, participant in ipairs(tournament.participants) do
                 if participant.type == "player" and Net.is_player(participant.id) then
                     local middle_positions = ui_positions.get_progress_bar_positions("middle")
-                    if middle_positions[tier2_index] then
-                        TournamentUI.add_progress_bar(participant.id, "TIER2_" .. tier2_index, "middle", 
-                            middle_positions[tier2_index].x, middle_positions[tier2_index].y, 
-                            middle_positions[tier2_index].z, tier2_index)
+                    if middle_positions[progress_bar_index] then
+                        TournamentUI.add_progress_bar(participant.id, "TIER2_" .. progress_bar_index, "middle", 
+                            middle_positions[progress_bar_index].x, middle_positions[progress_bar_index].y, 
+                            middle_positions[progress_bar_index].z, progress_bar_index)
                         TournamentUI.mark_progress_bar_spawned(tournament_id, participant.id, winner.id, "tier2")
                     end
                 end
@@ -359,22 +365,24 @@ function TournamentFlow.spawn_progress_bar_for_match(tournament_id, round, match
             
         elseif round == 3 then
             -- Round 3: top tier progress bar for champion
+            progress_bar_index = ui_positions.get_progress_bar_index(3, match_index, winner_is_player1)
+            
             -- Update UI for all players to show the progress bar
             for _, participant in ipairs(tournament.participants) do
                 if participant.type == "player" and Net.is_player(participant.id) then
                     local top_positions = ui_positions.get_progress_bar_positions("top")
-                    if top_positions[1] then
-                        TournamentUI.add_progress_bar(participant.id, "TIER3_1", "top", 
-                            top_positions[1].x, top_positions[1].y, 
-                            top_positions[1].z, 1)
+                    if top_positions[progress_bar_index] then
+                        TournamentUI.add_progress_bar(participant.id, "TIER3_" .. progress_bar_index, "top", 
+                            top_positions[progress_bar_index].x, top_positions[progress_bar_index].y, 
+                            top_positions[progress_bar_index].z, progress_bar_index)
                         TournamentUI.mark_progress_bar_spawned(tournament_id, participant.id, winner.id, "tier3")
                     end
                 end
             end
         end
         
-        print(string.format("[Flow] Spawned progress bar for winner %s in round %d match %d", 
-              winner.name, round, match_index))
+        print(string.format("[Flow] Spawned progress bar for winner %s in round %d match %d (is_player1: %s, index: %d)", 
+              winner.name, round, match_index, tostring(winner_is_player1), progress_bar_index))
     end)
 end
 
