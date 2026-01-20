@@ -42,6 +42,19 @@ function TournamentFlow.run_tournament(tournament_id)
         tournament.current_round = 1
         await(TournamentFlow.run_round_battles(tournament_id, 1))
         
+        -- Check if Round 1 is complete before advancing
+        if not TournamentCore.is_round_complete(tournament_id, 1) then
+            print("[Flow] ERROR: Round 1 not complete, cannot advance!")
+            return
+        end
+        
+        -- ADVANCE TO ROUND 2 - CRITICAL FIX
+        print("[Flow] Advancing to Round 2...")
+        if not TournamentCore.advance_round(tournament_id) then
+            print("[Flow] ERROR: Failed to advance to Round 2!")
+            return
+        end
+        
         -- Show board for Round 1 with no progress bars (no matches completed yet)
         await(TournamentFlow.show_board_to_all(tournament_id, "current"))
         await(Async.sleep(1.5))
@@ -58,6 +71,19 @@ function TournamentFlow.run_tournament(tournament_id)
         tournament.current_round = 2
         await(TournamentFlow.run_round_battles(tournament_id, 2))
         
+        -- Check if Round 2 is complete before advancing
+        if not TournamentCore.is_round_complete(tournament_id, 2) then
+            print("[Flow] ERROR: Round 2 not complete, cannot advance!")
+            return
+        end
+        
+        -- ADVANCE TO ROUND 3 - CRITICAL FIX
+        print("[Flow] Advancing to Round 3...")
+        if not TournamentCore.advance_round(tournament_id) then
+            print("[Flow] ERROR: Failed to advance to Round 3!")
+            return
+        end
+        
         -- Show board for Round 2 (Round 1 progress bars and losers already displayed)
         await(TournamentFlow.show_board_to_all(tournament_id, "current"))
         await(Async.sleep(1.5))
@@ -73,6 +99,12 @@ function TournamentFlow.run_tournament(tournament_id)
         print("[Flow] Starting Round 3 battles")
         tournament.current_round = 3
         await(TournamentFlow.run_round_battles(tournament_id, 3))
+        
+        -- Check if Round 3 is complete
+        if not TournamentCore.is_round_complete(tournament_id, 3) then
+            print("[Flow] ERROR: Round 3 not complete!")
+            return
+        end
         
         -- Show board for Round 3 (Round 1-2 progress bars and losers already displayed)
         await(TournamentFlow.show_board_to_all(tournament_id, "current"))
@@ -104,9 +136,12 @@ function TournamentFlow.process_round_one_by_one(tournament_id, round)
         local round_key = round == 1 and "round1" or (round == 2 and "round2" or "round3")
         local matches = tournament.matches[round_key]
         
-        if not matches then return end
+        if not matches then 
+            print(string.format("[Flow] No matches found for round %d, round_key: %s", round, round_key))
+            return 
+        end
         
-        print(string.format("[Flow] Processing round %d one by one", round))
+        print(string.format("[Flow] Processing round %d one by one, matches: %d", round, #matches))
         
         -- For Rounds 2 and 3: ensure all previous losers are greyscaled before processing
         if round >= 2 then
@@ -146,6 +181,8 @@ function TournamentFlow.process_round_one_by_one(tournament_id, round)
                 if match_index < #matches then
                     await(Async.sleep(0.5))
                 end
+            else
+                print(string.format("[Flow] Match %d in round %d not completed", match_index, round))
             end
         end
         
@@ -305,7 +342,7 @@ function TournamentFlow.spawn_progress_bar_for_match(tournament_id, round, match
             
         elseif round == 2 then
             -- Round 2: middle tier progress bars
-            local tier2_index = (match_index * 2) - 1
+            local tier2_index = match_index  -- Should be 1 or 2 for middle tier
             
             -- Update UI for all players to show the progress bar
             for _, participant in ipairs(tournament.participants) do
@@ -496,11 +533,11 @@ function TournamentFlow.run_round_battles(tournament_id, round)
         local matches = tournament.matches[round_key]
         
         if not matches then
-            print("[Flow] No matches for round " .. round)
+            print("[Flow] No matches for round " .. round .. " (round_key: " .. round_key .. ")")
             return
         end
         
-        print("[Flow] Running " .. #matches .. " battles")
+        print("[Flow] Running " .. #matches .. " battles for round " .. round)
         
         for i, match in ipairs(matches) do
             print(string.format("[Flow] Match %d: %s vs %s", i, match.player1.name, match.player2.name))
@@ -520,6 +557,8 @@ function TournamentFlow.run_round_battles(tournament_id, round)
             
             await(Async.sleep(0.5))
         end
+        
+        print("[Flow] Completed all battles for round " .. round)
     end)
 end
 

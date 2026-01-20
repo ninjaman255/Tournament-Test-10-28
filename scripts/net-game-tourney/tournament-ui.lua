@@ -132,7 +132,7 @@ function TournamentUI.show_progress_bars_for_specific_round(player_id, tournamen
     elseif round == 2 and tournament_data.matches.round2 then
         for match_index, match in ipairs(tournament_data.matches.round2) do
             if match.completed and match.winner then
-                local tier2_index = (match_index * 2) - 1
+                local tier2_index = match_index  -- Fixed: Should be 1 or 2, not (match_index * 2) - 1
                 local middle_positions = ui_positions.get_progress_bar_positions("middle")
                 if middle_positions[tier2_index] then
                     TournamentUI.add_progress_bar(player_id, "TIER2_" .. tier2_index, "middle", 

@@ -364,8 +364,11 @@ function TournamentCore.record_battle_result(tournament_id, round, match_index, 
     -- Track winner
     table.insert(tournament.winners, winner)
     
+    -- Debug: Check round completion
+    local round_complete = TournamentCore.is_round_complete(tournament_id, round)
     print(string.format("[Core] Recorded result: %s defeated %s in round %d match %d",
           winner.name, loser.name, round, match_index))
+    print(string.format("[Core] Round %d complete? %s", round, tostring(round_complete)))
     
     return true
 end
@@ -434,9 +437,25 @@ end
 -- Advance to next round
 function TournamentCore.advance_round(tournament_id)
     local tournament = tournaments[tournament_id]
-    if not tournament then return false end
+    if not tournament then 
+        print("[Core] Tournament not found for advancement")
+        return false 
+    end
     
-    if tournament.current_round == 1 then
+    -- Check if previous round is complete
+    local current_round = tournament.current_round or 0
+    
+    if current_round == 1 and not TournamentCore.is_round_complete(tournament_id, 1) then
+        print("[Core] Cannot advance: Round 1 not complete")
+        return false
+    end
+    
+    if current_round == 2 and not TournamentCore.is_round_complete(tournament_id, 2) then
+        print("[Core] Cannot advance: Round 2 not complete")
+        return false
+    end
+    
+    if current_round == 1 then
         -- Move to round 2
         tournament.current_round = 2
         
@@ -449,7 +468,7 @@ function TournamentCore.advance_round(tournament_id)
         end
         
         if #winners ~= 4 then
-            print("[Core] Not enough winners for round 2")
+            print("[Core] Not enough winners for round 2: " .. #winners)
             return false
         end
         
@@ -469,9 +488,10 @@ function TournamentCore.advance_round(tournament_id)
         end
         
         tournament.status = "battling"
+        print("[Core] Advanced to Round 2")
         return true
         
-    elseif tournament.current_round == 2 then
+    elseif current_round == 2 then
         -- Move to round 3
         tournament.current_round = 3
         
@@ -484,7 +504,7 @@ function TournamentCore.advance_round(tournament_id)
         end
         
         if #winners ~= 2 then
-            print("[Core] Not enough winners for round 3")
+            print("[Core] Not enough winners for round 3: " .. #winners)
             return false
         end
         
@@ -501,9 +521,11 @@ function TournamentCore.advance_round(tournament_id)
         
         print(string.format("[Core] Round 3 Final: %s vs %s", winners[1].name, winners[2].name))
         tournament.status = "battling"
+        print("[Core] Advanced to Round 3")
         return true
     end
     
+    print("[Core] Cannot advance from current round: " .. current_round)
     return false
 end
 
@@ -522,7 +544,16 @@ function TournamentCore.get_winner(tournament_id)
     if not tournament then return nil end
     
     if tournament.matches.round3 and tournament.matches.round3[1] then
-        return tournament.matches.round3[1].winner
+        local final_match = tournament.matches.round3[1]
+        if final_match.completed and final_match.winner then
+            print(string.format("[Core] Tournament %d winner: %s", tournament_id, final_match.winner.name))
+            return final_match.winner
+        else
+            print(string.format("[Core] Round 3 match not completed: completed=%s, winner=%s", 
+                  tostring(final_match.completed), final_match.winner and final_match.winner.name or "nil"))
+        end
+    else
+        print(string.format("[Core] No round 3 matches found in tournament %d", tournament_id))
     end
     
     return nil
