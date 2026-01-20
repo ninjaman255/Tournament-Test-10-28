@@ -60,7 +60,9 @@ local constants = {
     default_background_anim_path_bn4 = "/server/assets/tourney/tourney-board-elements/gradient.anim",
     default_grid_anim_path_bn4 = "/server/assets/tourney/tourney-board-elements/grid.anim",
     default_mug_anim = "/server/assets/tourney/tourney-board-elements/mug.anim",
-    
+    mug_frame_texture_path = "/server/assets/tourney/tourney-board-elements/mini-mug-frame.png",
+    mug_frame_anim_path = "/server/assets/tourney/tourney-board-elements/mini-mug-frame.anim",
+    mug_frame_anim_states = {"INACTIVE", "ACTIVE", "MOVING"},
     -- Crown elements
     crown_texture_path = "/server/assets/tourney/tourney-board-elements/crown.png",
     crown_anim_path = "/server/assets/tourney/tourney-board-elements/crown.anim",

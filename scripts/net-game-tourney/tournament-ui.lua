@@ -313,9 +313,8 @@ function TournamentUI.add_mugshot(player_id, index, mugshot_texture, x, y, z)
     
     -- Frame
     games.add_ui_element(frame_id, player_id,
-        "/server/assets/tourney/tourney-board-elements/mini-mug-frame.png",
-        "/server/assets/tourney/tourney-board-elements/mini-mug-frame.anim",
-        "ACTIVE", x, y, 3)
+        constants.mug_frame_texture_path,
+        constants.mug_frame_anim_path, "ACTIVE", x, y, 3)
     
     -- Mugshot
     games.add_ui_element(mug_id, player_id,

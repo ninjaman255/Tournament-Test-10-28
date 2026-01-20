@@ -57,6 +57,32 @@ UIPositions.progress_bar_positions = {
     }
 }
 
+UIPositions.progress_bar_overlays = {
+    -- Tier 1 (Blue Moon)
+    bottom_tier = {
+        { x = 17,  y = 96, z = 2 },
+        { x = 47,  y = 96, z = 2 },
+        { x = 73,  y = 96, z = 2 },
+        { x = 103, y = 96, z = 2 },
+        { x = 137, y = 96, z = 2 },
+        { x = 167, y = 96, z = 2 },
+        { x = 193, y = 96, z = 2 },
+        { x = 223, y = 96, z = 2 },
+    },
+    -- Tier 2 (Blue Moon)
+    middle_tier = {
+        { x = 29,  y = 72, z = 2 },
+        { x = 91,  y = 72, z = 2 },
+        { x = 149, y = 72, z = 2 },
+        { x = 211, y = 72, z = 2 },
+    },
+    -- Tier 3 (Blue Moon)
+    top_tier = {
+        { x = 57,  y = 56, z = 2 },
+        { x = 183, y = 56, z = 2 },
+    },
+}
+
 UIPositions.ui_element_positions = {
     -- Bracket elements
     tournament_tree = {x = 0, y = 0, z = 0},
