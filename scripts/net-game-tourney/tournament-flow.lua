@@ -607,8 +607,7 @@ function TournamentFlow.start_player_battle(tournament_id, round, match_index, m
             -- Reason 1: Player ran away
             -- Reason 2, 3, 4: Player lost (different defeat conditions)
             -- Reason 0 or other: Check health/enemies
-            if battle_result.reason and (battle_result.reason == 1 or 
-                                         battle_result.reason == 2 or 
+            if battle_result.reason and (battle_result.reason == 2 or 
                                          battle_result.reason == 3 or 
                                          battle_result.reason == 4) then
                 -- Player ran away or lost - opponent wins
@@ -619,31 +618,16 @@ function TournamentFlow.start_player_battle(tournament_id, round, match_index, m
                 -- No losing reason specified, check health and enemies
                 local player_alive = (battle_result.health or 0) > 0
                 
-                -- Check enemies status
-                local all_enemies_defeated = true
-                if battle_result.enemies and #battle_result.enemies > 0 then
-                    for _, enemy in ipairs(battle_result.enemies) do
-                        if enemy.health > 0 then
-                            all_enemies_defeated = false
-                            print(string.format("[Flow] Enemy %s still alive with %d health", enemy.id, enemy.health))
-                            break
-                        end
-                    end
-                else
-                    -- No enemies in result, assume all defeated
-                    print("[Flow] No enemies in battle result, assuming all defeated")
-                end
-                
-                if player_alive and all_enemies_defeated then
+                if player_alive and battle_result.reason == 1 then
                     -- Player survived and all enemies defeated
                     winner_id = player_id
                     loser_id = opponent_id
                     print("[Flow] Player survived and all enemies defeated, player wins")
                 else
-                    -- Player died or enemies survived
+                    -- Player died
                     winner_id = opponent_id
                     loser_id = player_id
-                    print("[Flow] Player died or enemies survived, opponent wins")
+                    print("[Flow] Player died, opponent wins")
                 end
             end
             
