@@ -55,11 +55,13 @@ function TournamentFlow.run_tournament(tournament_id)
             return
         end
         
-        -- Show board for Round 1 with no progress bars (no matches processed yet)
+        -- Show board for Round 1 results - NO PROGRESS BARS yet (Round 1 not processed)
+        print("[Flow] Showing board for Round 1 results (no progress bars yet)")
         await(TournamentFlow.show_board_to_all(tournament_id, "current"))
         await(Async.sleep(1.5))
         
-        -- Process Round 1 matches one by one
+        -- Process Round 1 matches one by one (spawns progress bars, greyscales losers, moves winners)
+        print("[Flow] Processing Round 1 matches one by one...")
         await(TournamentFlow.process_round_one_by_one(tournament_id, 1))
         
         -- Close board after processing Round 1
@@ -84,11 +86,13 @@ function TournamentFlow.run_tournament(tournament_id)
             return
         end
         
-        -- Show board for Round 2 (Round 1 progress bars and losers already displayed)
+        -- Show board for Round 2 results - NOW SHOULD SHOW ROUND 1 PROGRESS BARS
+        print("[Flow] Showing board for Round 2 results (with Round 1 progress bars)")
         await(TournamentFlow.show_board_to_all(tournament_id, "current"))
         await(Async.sleep(1.5))
         
-        -- Process Round 2 matches one by one
+        -- Process Round 2 matches one by one (spawns Round 2 progress bars, greyscales losers, moves winners)
+        print("[Flow] Processing Round 2 matches one by one...")
         await(TournamentFlow.process_round_one_by_one(tournament_id, 2))
         
         -- Close board after processing Round 2
@@ -106,11 +110,13 @@ function TournamentFlow.run_tournament(tournament_id)
             return
         end
         
-        -- Show board for Round 3 (Round 1-2 progress bars and losers already displayed)
+        -- Show board for Round 3 results - NOW SHOULD SHOW ROUND 1 & 2 PROGRESS BARS
+        print("[Flow] Showing board for Round 3 results (with Round 1 & 2 progress bars)")
         await(TournamentFlow.show_board_to_all(tournament_id, "current"))
         await(Async.sleep(1.5))
         
-        -- Process Round 3 matches one by one
+        -- Process Round 3 matches one by one (spawns Round 3 progress bar, greyscales loser, moves champion)
+        print("[Flow] Processing Round 3 match...")
         await(TournamentFlow.process_round_one_by_one(tournament_id, 3))
         
         -- Final champion announcement
@@ -790,6 +796,9 @@ function TournamentFlow.show_board_to_all(tournament_id, view_type)
                 
                 TournamentUI.show_transition(player_id, true, 0.3)
                 await(Async.sleep(0.3))
+                
+                print(string.format("[Flow] Board shown to player %s (tournament %d, current round: %d)", 
+                      player_id, tournament_id, tournament.current_round or 0))
             end
         end
     end)

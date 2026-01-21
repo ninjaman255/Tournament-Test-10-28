@@ -58,7 +58,7 @@ UIPositions.progress_bar_positions = {
 }
 
 UIPositions.progress_bar_overlays = {
-    -- Tier 1 (Blue Moon)
+    -- Tier 1
     bottom_tier = {
         { x = 17,  y = 96, z = 2 },
         { x = 47,  y = 96, z = 2 },
@@ -69,14 +69,14 @@ UIPositions.progress_bar_overlays = {
         { x = 193, y = 96, z = 2 },
         { x = 223, y = 96, z = 2 },
     },
-    -- Tier 2 (Blue Moon)
+    -- Tier 2
     middle_tier = {
         { x = 29,  y = 72, z = 2 },
         { x = 91,  y = 72, z = 2 },
         { x = 149, y = 72, z = 2 },
         { x = 211, y = 72, z = 2 },
     },
-    -- Tier 3 (Blue Moon)
+    -- Tier 3
     top_tier = {
         { x = 57,  y = 56, z = 2 },
         { x = 183, y = 56, z = 2 },
