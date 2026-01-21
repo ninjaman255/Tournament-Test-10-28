@@ -121,7 +121,6 @@ function TournamentFlow.run_tournament(tournament_id)
         await(TournamentFlow.process_round_one_by_one(tournament_id, 3))
         await(Async.sleep(2.0))
         -- Final champion announcement
-        await(Async.sleep(1.0))
         await(TournamentFlow.announce_champion(tournament_id))
         await(Async.sleep(3.0))
         

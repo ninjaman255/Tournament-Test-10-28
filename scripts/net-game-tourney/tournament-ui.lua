@@ -372,12 +372,6 @@ function TournamentUI.show_champion_view(player_id, tournament_data)
                 TournamentUI.mark_greyscale(tournament_data.id, player_id, p.id)
             end
         end
-        
-        local crown_pos = ui_positions.ui_element_positions.champion_crown
-        games.add_ui_element("CHAMPION_INDICATOR", player_id,
-            constants.crown_texture_path,
-            constants.crown_anim_path,
-            "ACTIVE", crown_pos.x, crown_pos.y, crown_pos.z)
 
         -- Announce champion
         Net.message_player(player_id, "CHAMPION: " .. winner.name)
