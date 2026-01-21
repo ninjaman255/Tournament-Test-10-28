@@ -733,6 +733,7 @@ function TournamentFlow.announce_champion(tournament_id)
     return async(function()
         local TournamentCore = require("scripts/net-game-tourney/tournament-core")
         local TournamentUI = require("scripts/net-game-tourney/tournament-ui")
+        local UIPositions = require("scripts/net-game-tourney/ui-pos")
         local games = require("scripts/net-games/framework")
         
         local tournament = TournamentCore.get_tournament(tournament_id)
@@ -743,17 +744,26 @@ function TournamentFlow.announce_champion(tournament_id)
             print("[Flow] No winner found")
             return
         end
+
+        -- Get champion position for crown placement
+        local champion_crown_pos = UIPositions.ui_element_positions.champion_crown
         
-        -- Show champion announcement
-        print("[Flow] Tournament champion: " .. winner.name)
-        
-        -- Announce to all players
+        -- Add champion crown for all players
         for _, participant in ipairs(tournament.participants) do
             if participant.type == "player" and Net.is_player(participant.id) then
-                Net.message_player(participant.id, "Tournament Complete! Champion: " .. winner.name)
-            end
+                local player_id = participant.id
+                
+                -- Show champion crown at the champion position
+                games.add_ui_element("CHAMPION_INDICATOR", player_id,
+                    constants.crown_texture_path,
+                    constants.crown_anim_path,
+                    "ACTIVE", 
+                    champion_crown_pos.x, 
+                    champion_crown_pos.y, 
+                    champion_crown_pos.z)
+                 Net.message_player(participant.id, "Tournament Complete! Champion: " .. winner.name)
+            end 
         end
-        
         -- Note: The round 3 loser should already be greyscaled by process_round_one_by_one
     end)
 end
