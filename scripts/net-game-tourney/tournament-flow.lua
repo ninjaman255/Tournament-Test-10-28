@@ -86,9 +86,10 @@ function TournamentFlow.run_tournament(tournament_id)
             return
         end
         
-        -- Show board for Round 2 results - NOW SHOULD SHOW ROUND 1 PROGRESS BARS ONLY
-        print("[Flow] Showing board for Round 2 results (with Round 1 progress bars only)")
-        await(TournamentFlow.show_board_to_all(tournament_id, "current", true))
+        -- CRITICAL FIX: Show board for Round 2 results - ONLY ROUND 1 PROGRESS BARS
+        -- Round 2 progress bars should NOT appear here - they will appear one-by-one in process_round_one_by_one
+        print("[Flow] Showing board for Round 2 results (with Round 1 progress bars ONLY)")
+        await(TournamentFlow.show_board_to_all(tournament_id, "current", false))
         await(Async.sleep(2.0))
         
         -- Process Round 2 matches one by one (spawns Round 2 progress bars, greyscales losers, moves winners)
@@ -110,8 +111,8 @@ function TournamentFlow.run_tournament(tournament_id)
             return
         end
         
-        -- Show board for Round 3 results - NOW SHOULD SHOW ROUND 1 & 2 PROGRESS BARS ONLY
-        print("[Flow] Showing board for Round 3 results (with Round 1 & 2 progress bars only)")
+        -- Show board for Round 3 results - NOW SHOULD SHOW ROUND 1 & 2 PROGRESS BARS
+        print("[Flow] Showing board for Round 3 results (with Round 1 & 2 progress bars)")
         await(TournamentFlow.show_board_to_all(tournament_id, "current", true))
         await(Async.sleep(1.5))
         
@@ -821,7 +822,8 @@ function TournamentFlow.hide_board_from_all(tournament_id)
                 TournamentUI.show_transition(player_id, false, 0.3)
                 await(Async.sleep(0.3))
                 
-                TournamentUI.cleanup(player_id, tournament_id)
+                -- CRITICAL FIX: Only clean up UI elements, NOT tracking
+                TournamentUI.cleanup_ui_elements(player_id)
                 
                 TournamentUI.show_transition(player_id, true, 0.3)
                 Net.unlock_player_input(player_id)
@@ -850,7 +852,8 @@ function TournamentFlow.cleanup_tournament(tournament_id)
     -- Cleanup UI for players
     for _, participant in ipairs(tournament.participants) do
         if participant.type == "player" and Net.is_player(participant.id) then
-            TournamentUI.cleanup(participant.id, tournament_id)
+            -- Only clean up UI elements here, tracking will be cleared by TournamentCore
+            TournamentUI.cleanup_ui_elements(participant.id)
             
             -- Restore area state if still saved
             local state = original_area_states[participant.id]
@@ -862,7 +865,7 @@ function TournamentFlow.cleanup_tournament(tournament_id)
         end
     end
     
-    -- Cleanup state
+    -- Cleanup state - this will clear tracking through TournamentCore
     TournamentCore.cleanup_tournament(tournament_id)
     
     print("[Flow] Tournament cleanup complete")

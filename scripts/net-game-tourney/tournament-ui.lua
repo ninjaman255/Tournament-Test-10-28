@@ -112,8 +112,8 @@ function TournamentUI.show_board(player_id, tournament_data, view_type, show_all
     print(string.format("[UI] Showing board to %s (tournament %d, view: %s, current round: %d, show_all_progress_bars: %s)", 
           player_id, tournament_data.id, view_type or "default", tournament_data.current_round or 0, tostring(show_all_progress_bars)))
     
-    -- Cleanup any existing UI first
-    TournamentUI.cleanup(player_id, tournament_data.id)
+    -- Cleanup any existing UI elements but DON'T clear tracking
+    TournamentUI.cleanup_ui_elements(player_id)
     
     -- Setup background
     TournamentUI.setup_background(player_id, tournament_data.config.theme)
@@ -135,7 +135,7 @@ function TournamentUI.show_board(player_id, tournament_data, view_type, show_all
     
     -- CRITICAL FIX: Only show progress bars based on the flag
     if show_all_progress_bars then
-        -- Show progress bars from all completed rounds
+        -- Show progress bars from all completed and processed rounds
         TournamentUI.show_all_progress_bars(player_id, tournament_data)
     else
         -- Only show progress bars from previous processed rounds
@@ -143,6 +143,39 @@ function TournamentUI.show_board(player_id, tournament_data, view_type, show_all
     end
     
     return true
+end
+
+-- New function: cleanup UI elements without clearing tracking
+function TournamentUI.cleanup_ui_elements(player_id)
+    TournamentUI.cleanup_participants(player_id)
+    
+    local elements = {
+        "BOARD_BG", "BOARD_GRID", "TOURNEY_TREE", "CHAMPION_TOPPER",
+        "TITLE_BANNER", "CROWN_1", "CROWN_2", "CHAMPION_INDICATOR",
+        "TIER1_1", "TIER1_2", "TIER1_3", "TIER1_4", "TIER1_5", "TIER1_6", "TIER1_7", "TIER1_8",
+        "TIER2_1", "TIER2_2", "TIER2_3", "TIER2_4",
+        "TIER3_1", "TIER3_2"
+    }
+    
+    for _, element in ipairs(elements) do
+        games.remove_ui_element(element, player_id)
+    end
+    
+    print("[UI] Cleaned UI elements for " .. player_id)
+end
+
+-- Cleanup all UI and tracking
+function TournamentUI.cleanup(player_id, tournament_id)
+    TournamentUI.cleanup_ui_elements(player_id)
+    
+    -- Clear tracking for this player in this tournament
+    if tournament_id then
+        TournamentUI.clear_greyscale_tracking(player_id, tournament_id)
+        TournamentUI.clear_progress_bar_tracking(player_id, tournament_id)
+        TournamentUI.clear_processed_rounds_tracking(player_id, tournament_id)
+    end
+    
+    print("[UI] Cleaned UI and tracking for " .. player_id)
 end
 
 -- New function to apply existing greyscale states
@@ -170,25 +203,35 @@ function TournamentUI.apply_existing_greyscale(player_id, tournament_data)
     end
 end
 
--- Show progress bars from all completed rounds
+-- Show progress bars from all completed and processed rounds
 function TournamentUI.show_all_progress_bars(player_id, tournament_data)
     local round = tournament_data.current_round or 0
     
-    -- Show progress bars for all completed rounds (1 to round-1)
+    -- Show progress bars for all completed rounds that are processed
     for r = 1, round - 1 do
-        TournamentUI.show_progress_bars_for_specific_round(player_id, tournament_data, r, false)
+        if TournamentUI.is_round_processed(tournament_data.id, player_id, r) then
+            TournamentUI.show_progress_bars_for_specific_round(player_id, tournament_data, r, false)
+        end
     end
 end
 
 -- Show progress bars for a specific round
 function TournamentUI.show_progress_bars_for_specific_round(player_id, tournament_data, round, check_processed)
-    check_processed = check_processed or false
-    local ui_positions = require("scripts/net-game-tourney/ui-pos")
+    check_processed = check_processed or false  -- Default to false when called from show_all_progress_bars
+    
+    -- Debug: Check if round is processed
+    local is_processed = TournamentUI.is_round_processed(tournament_data.id, player_id, round)
+    print(string.format("[UI] Checking Round %d for player %s: is_processed=%s, check_processed=%s", 
+          round, player_id, tostring(is_processed), tostring(check_processed)))
     
     -- If check_processed is true and this round hasn't been processed for this player, skip
-    if check_processed and not TournamentUI.is_round_processed(tournament_data.id, player_id, round) then
+    if check_processed and not is_processed then
+        print(string.format("[UI] Skipping Round %d progress bars for player %s (not processed yet, check_processed: true)", 
+              round, player_id))
         return
     end
+    
+    local ui_positions = require("scripts/net-game-tourney/ui-pos")
     
     if round == 1 and tournament_data.matches.round1 then
         for match_index, match in ipairs(tournament_data.matches.round1) do
@@ -202,8 +245,8 @@ function TournamentUI.show_progress_bars_for_specific_round(player_id, tournamen
                     TournamentUI.add_progress_bar(player_id, "TIER1_" .. progress_bar_index, "bottom", 
                         bottom_positions[progress_bar_index].x, bottom_positions[progress_bar_index].y, 
                         bottom_positions[progress_bar_index].z, progress_bar_index)
-                    print(string.format("[UI] Showed Round 1 progress bar %d for player %s (check_processed: %s)", 
-                          progress_bar_index, player_id, tostring(check_processed)))
+                    print(string.format("[UI] Showed Round 1 progress bar %d for player %s", 
+                          progress_bar_index, player_id))
                 end
             end
         end
@@ -219,8 +262,8 @@ function TournamentUI.show_progress_bars_for_specific_round(player_id, tournamen
                     TournamentUI.add_progress_bar(player_id, "TIER2_" .. progress_bar_index, "middle", 
                         middle_positions[progress_bar_index].x, middle_positions[progress_bar_index].y, 
                         middle_positions[progress_bar_index].z, progress_bar_index)
-                    print(string.format("[UI] Showed Round 2 progress bar %d for player %s (check_processed: %s)", 
-                          progress_bar_index, player_id, tostring(check_processed)))
+                    print(string.format("[UI] Showed Round 2 progress bar %d for player %s", 
+                          progress_bar_index, player_id))
                 end
             end
         end
@@ -236,8 +279,8 @@ function TournamentUI.show_progress_bars_for_specific_round(player_id, tournamen
                 TournamentUI.add_progress_bar(player_id, "TIER3_" .. progress_bar_index, "top", 
                     top_positions[progress_bar_index].x, top_positions[progress_bar_index].y, 
                     top_positions[progress_bar_index].z, progress_bar_index)
-                print(string.format("[UI] Showed Round 3 progress bar %d for player %s (check_processed: %s)", 
-                      progress_bar_index, player_id, tostring(check_processed)))
+                print(string.format("[UI] Showed Round 3 progress bar %d for player %s", 
+                      progress_bar_index, player_id))
             end
         end
     end
@@ -251,8 +294,10 @@ function TournamentUI.show_previous_round_progress_bars(player_id, tournament_da
     for r = 1, current_round - 1 do
         -- Only show progress bars for rounds that have been processed one-by-one
         if TournamentUI.is_round_processed(tournament_data.id, player_id, r) then
-            TournamentUI.show_progress_bars_for_specific_round(player_id, tournament_data, r, true)
+            TournamentUI.show_progress_bars_for_specific_round(player_id, tournament_data, r, false)
             print(string.format("[UI] Showing progress bars for Round %d (processed: true, current round: %d)", r, current_round))
+        else
+            print(string.format("[UI] Skipping Round %d progress bars (not processed yet, current round: %d)", r, current_round))
         end
     end
     
@@ -451,32 +496,6 @@ function TournamentUI.cleanup_participants(player_id)
         games.remove_ui_element("MUG_FRAME_" .. i, player_id)
         games.remove_ui_element("MUG_" .. i, player_id)
     end
-end
-
--- Cleanup all UI
-function TournamentUI.cleanup(player_id, tournament_id)
-    TournamentUI.cleanup_participants(player_id)
-    
-    local elements = {
-        "BOARD_BG", "BOARD_GRID", "TOURNEY_TREE", "CHAMPION_TOPPER",
-        "TITLE_BANNER", "CROWN_1", "CROWN_2", "CHAMPION_INDICATOR",
-        "TIER1_1", "TIER1_2", "TIER1_3", "TIER1_4", "TIER1_5", "TIER1_6", "TIER1_7", "TIER1_8",
-        "TIER2_1", "TIER2_2", "TIER2_3", "TIER2_4",
-        "TIER3_1", "TIER3_2"
-    }
-    
-    for _, element in ipairs(elements) do
-        games.remove_ui_element(element, player_id)
-    end
-    
-    -- Clear tracking for this player in this tournament
-    if tournament_id then
-        TournamentUI.clear_greyscale_tracking(player_id, tournament_id)
-        TournamentUI.clear_progress_bar_tracking(player_id, tournament_id)
-        TournamentUI.clear_processed_rounds_tracking(player_id, tournament_id)
-    end
-    
-    print("[UI] Cleaned UI for " .. player_id)
 end
 
 -- Fade transition
