@@ -19,6 +19,10 @@ function TournamentUI.clear_progress_bar_tracking(player_id, tournament_id)
     end
 end
 
+function TournamentUI.get_current_round(tournament_data)
+    return tournament_data.current_round or 0
+end
+
 -- Mark a progress bar tier as spawned for a participant
 function TournamentUI.mark_progress_bar_spawned(tournament_id, player_id, participant_id, tier)
     if not tournament_id then return end
@@ -97,22 +101,53 @@ function TournamentUI.show_board(player_id, tournament_data, view_type)
     else
         -- Show participants at current positions
         TournamentUI.show_current_participants(player_id, tournament_data)
+        
+        -- CRITICAL: Apply greyscale to all previously marked losers immediately
+        TournamentUI.apply_existing_greyscale(player_id, tournament_data)
     end
     
-    -- Always show progress bars from all previous rounds
-    TournamentUI.show_all_progress_bars(player_id, tournament_data)
+    -- IMPORTANT: Only show progress bars from previous rounds, NOT current round
+    TournamentUI.show_previous_round_progress_bars(player_id, tournament_data)
     
     return true
 end
 
--- Show progress bars from all completed rounds
-function TournamentUI.show_all_progress_bars(player_id, tournament_data)
-    local round = tournament_data.current_round or 0
+-- New function to apply existing greyscale states
+function TournamentUI.apply_existing_greyscale(player_id, tournament_data)
+    if not tournament_data or not tournament_data.id then return end
     
-    -- Show progress bars for all completed rounds
-    for r = 1, round - 1 do
+    -- Check if this player has any greyscale tracking for this tournament
+    if greyscale_tracking[tournament_data.id] and 
+       greyscale_tracking[tournament_data.id][player_id] then
+        
+        local greyscaled_participants = greyscale_tracking[tournament_data.id][player_id]
+        
+        -- Apply greyscale to each marked participant
+        for participant_id, _ in pairs(greyscaled_participants) do
+            -- Find this participant's current position
+            for i, position in ipairs(tournament_data.ui_state.positions) do
+                if position.participant_id == participant_id then
+                    -- Apply greyscale effect
+                    games.update_ui_element("MUG_" .. i, player_id, constants.greyscale_properties)
+                    print(string.format("[UI] Applied existing greyscale to mugshot %d for player %s", i, player_id))
+                    break
+                end
+            end
+        end
+    end
+end
+
+-- Updated function to show only previous round progress bars
+function TournamentUI.show_previous_round_progress_bars(player_id, tournament_data)
+    local current_round = tournament_data.current_round or 0
+    
+    -- Show progress bars for all completed rounds (previous rounds only)
+    for r = 1, current_round - 1 do
         TournamentUI.show_progress_bars_for_specific_round(player_id, tournament_data, r)
     end
+    
+    print(string.format("[UI] Showed progress bars for rounds 1 to %d (current round: %d)", 
+          math.max(0, current_round - 1), current_round))
 end
 
 -- Show progress bars for a specific round
