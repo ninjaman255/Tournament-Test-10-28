@@ -103,14 +103,14 @@ function TournamentUI.is_greyscale(tournament_id, player_id, participant_id)
 end
 
 -- Show tournament board to a player
-function TournamentUI.show_board(player_id, tournament_data, view_type)
+function TournamentUI.show_board(player_id, tournament_data, view_type, show_all_progress_bars)
     if not player_id or not tournament_data then
         print("[UI] Invalid parameters")
         return false
     end
     
-    print(string.format("[UI] Showing board to %s (tournament %d, view: %s, current round: %d)", 
-          player_id, tournament_data.id, view_type or "default", tournament_data.current_round or 0))
+    print(string.format("[UI] Showing board to %s (tournament %d, view: %s, current round: %d, show_all_progress_bars: %s)", 
+          player_id, tournament_data.id, view_type or "default", tournament_data.current_round or 0, tostring(show_all_progress_bars)))
     
     -- Cleanup any existing UI first
     TournamentUI.cleanup(player_id, tournament_data.id)
@@ -133,8 +133,14 @@ function TournamentUI.show_board(player_id, tournament_data, view_type)
         TournamentUI.apply_existing_greyscale(player_id, tournament_data)
     end
     
-    -- IMPORTANT: Only show progress bars from previous rounds, NOT current round
-    TournamentUI.show_previous_round_progress_bars(player_id, tournament_data)
+    -- CRITICAL FIX: Only show progress bars based on the flag
+    if show_all_progress_bars then
+        -- Show progress bars from all completed rounds
+        TournamentUI.show_all_progress_bars(player_id, tournament_data)
+    else
+        -- Only show progress bars from previous processed rounds
+        TournamentUI.show_previous_round_progress_bars(player_id, tournament_data)
+    end
     
     return true
 end
@@ -168,18 +174,21 @@ end
 function TournamentUI.show_all_progress_bars(player_id, tournament_data)
     local round = tournament_data.current_round or 0
     
-    -- Show progress bars for all completed rounds
+    -- Show progress bars for all completed rounds (1 to round-1)
     for r = 1, round - 1 do
-        TournamentUI.show_progress_bars_for_specific_round(player_id, tournament_data, r)
+        TournamentUI.show_progress_bars_for_specific_round(player_id, tournament_data, r, false)
     end
 end
 
 -- Show progress bars for a specific round
-function TournamentUI.show_progress_bars_for_specific_round(player_id, tournament_data, round)
-    -- For debugging: Show progress bars for completed rounds regardless of processing status
-    -- The tournament flow ensures rounds are processed in order, so if a round has completed matches,
-    -- we should show the progress bars
+function TournamentUI.show_progress_bars_for_specific_round(player_id, tournament_data, round, check_processed)
+    check_processed = check_processed or false
     local ui_positions = require("scripts/net-game-tourney/ui-pos")
+    
+    -- If check_processed is true and this round hasn't been processed for this player, skip
+    if check_processed and not TournamentUI.is_round_processed(tournament_data.id, player_id, round) then
+        return
+    end
     
     if round == 1 and tournament_data.matches.round1 then
         for match_index, match in ipairs(tournament_data.matches.round1) do
@@ -193,8 +202,8 @@ function TournamentUI.show_progress_bars_for_specific_round(player_id, tournamen
                     TournamentUI.add_progress_bar(player_id, "TIER1_" .. progress_bar_index, "bottom", 
                         bottom_positions[progress_bar_index].x, bottom_positions[progress_bar_index].y, 
                         bottom_positions[progress_bar_index].z, progress_bar_index)
-                    print(string.format("[UI] Showed Round 1 progress bar %d for player %s", 
-                          progress_bar_index, player_id))
+                    print(string.format("[UI] Showed Round 1 progress bar %d for player %s (check_processed: %s)", 
+                          progress_bar_index, player_id, tostring(check_processed)))
                 end
             end
         end
@@ -210,8 +219,8 @@ function TournamentUI.show_progress_bars_for_specific_round(player_id, tournamen
                     TournamentUI.add_progress_bar(player_id, "TIER2_" .. progress_bar_index, "middle", 
                         middle_positions[progress_bar_index].x, middle_positions[progress_bar_index].y, 
                         middle_positions[progress_bar_index].z, progress_bar_index)
-                    print(string.format("[UI] Showed Round 2 progress bar %d for player %s", 
-                          progress_bar_index, player_id))
+                    print(string.format("[UI] Showed Round 2 progress bar %d for player %s (check_processed: %s)", 
+                          progress_bar_index, player_id, tostring(check_processed)))
                 end
             end
         end
@@ -227,46 +236,27 @@ function TournamentUI.show_progress_bars_for_specific_round(player_id, tournamen
                 TournamentUI.add_progress_bar(player_id, "TIER3_" .. progress_bar_index, "top", 
                     top_positions[progress_bar_index].x, top_positions[progress_bar_index].y, 
                     top_positions[progress_bar_index].z, progress_bar_index)
-                print(string.format("[UI] Showed Round 3 progress bar %d for player %s", 
-                      progress_bar_index, player_id))
+                print(string.format("[UI] Showed Round 3 progress bar %d for player %s (check_processed: %s)", 
+                      progress_bar_index, player_id, tostring(check_processed)))
             end
         end
     end
 end
 
--- Updated function to show only previous round progress bars
+-- Updated function to show only previous processed round progress bars
 function TournamentUI.show_previous_round_progress_bars(player_id, tournament_data)
     local current_round = tournament_data.current_round or 0
     
-    -- Show progress bars for all completed rounds (previous rounds only)
-    -- IMPORTANT: For Rounds 2 and 3, we want to show progress bars from previous rounds
-    if current_round >= 2 then
-        -- For Round 2: show Round 1 progress bars
-        -- For Round 3: show Round 1 and 2 progress bars
-        for r = 1, current_round - 1 do
-            -- Check if this round has matches and they're completed
-            local round_key = r == 1 and "round1" or (r == 2 and "round2" or "round3")
-            local matches = tournament_data.matches[round_key]
-            
-            if matches then
-                -- If any match in this round is completed, show progress bars for the round
-                local round_has_completed_matches = false
-                for _, match in ipairs(matches) do
-                    if match.completed then
-                        round_has_completed_matches = true
-                        break
-                    end
-                end
-                
-                if round_has_completed_matches then
-                    TournamentUI.show_progress_bars_for_specific_round(player_id, tournament_data, r)
-                    print(string.format("[UI] Showing progress bars for Round %d (current round: %d)", r, current_round))
-                end
-            end
+    -- Show progress bars for all processed previous rounds only
+    for r = 1, current_round - 1 do
+        -- Only show progress bars for rounds that have been processed one-by-one
+        if TournamentUI.is_round_processed(tournament_data.id, player_id, r) then
+            TournamentUI.show_progress_bars_for_specific_round(player_id, tournament_data, r, true)
+            print(string.format("[UI] Showing progress bars for Round %d (processed: true, current round: %d)", r, current_round))
         end
     end
     
-    print(string.format("[UI] Showed progress bars for rounds 1 to %d (current round: %d)", 
+    print(string.format("[UI] Showed progress bars for processed rounds 1 to %d (current round: %d)", 
           math.max(0, current_round - 1), current_round))
 end
 

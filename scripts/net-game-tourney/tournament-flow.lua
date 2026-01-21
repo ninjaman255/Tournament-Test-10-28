@@ -30,7 +30,7 @@ function TournamentFlow.run_tournament(tournament_id)
         TournamentCore.update_positions(tournament_id, 0)
         
         -- Show round 0 board with all participants at bottom (NO PROGRESS BARS)
-        await(TournamentFlow.show_board_to_all(tournament_id, "round0"))
+        await(TournamentFlow.show_board_to_all(tournament_id, "round0", false))
         await(Async.sleep(2.0))
         
         -- Close board for all players
@@ -56,14 +56,14 @@ function TournamentFlow.run_tournament(tournament_id)
         end
         
         -- Show board for Round 1 results - NO PROGRESS BARS yet (Round 1 not processed)
-        print("[Flow] Showing board for Round 1 results (no progress bars yet)")
-        await(TournamentFlow.show_board_to_all(tournament_id, "current"))
-        await(Async.sleep(1.5))
+        print("[Flow] Showing board for Round 1 results (NO progress bars yet)")
+        await(TournamentFlow.show_board_to_all(tournament_id, "current", false))
+        await(Async.sleep(2.0))
         
         -- Process Round 1 matches one by one (spawns progress bars, greyscales losers, moves winners)
         print("[Flow] Processing Round 1 matches one by one...")
         await(TournamentFlow.process_round_one_by_one(tournament_id, 1))
-        
+        await(Async.sleep(2.0))
         -- Close board after processing Round 1
         await(TournamentFlow.hide_board_from_all(tournament_id))
         await(Async.sleep(0.5))
@@ -86,15 +86,15 @@ function TournamentFlow.run_tournament(tournament_id)
             return
         end
         
-        -- Show board for Round 2 results - NOW SHOULD SHOW ROUND 1 PROGRESS BARS
-        print("[Flow] Showing board for Round 2 results (with Round 1 progress bars)")
-        await(TournamentFlow.show_board_to_all(tournament_id, "current"))
-        await(Async.sleep(1.5))
+        -- Show board for Round 2 results - NOW SHOULD SHOW ROUND 1 PROGRESS BARS ONLY
+        print("[Flow] Showing board for Round 2 results (with Round 1 progress bars only)")
+        await(TournamentFlow.show_board_to_all(tournament_id, "current", true))
+        await(Async.sleep(2.0))
         
         -- Process Round 2 matches one by one (spawns Round 2 progress bars, greyscales losers, moves winners)
         print("[Flow] Processing Round 2 matches one by one...")
         await(TournamentFlow.process_round_one_by_one(tournament_id, 2))
-        
+        await(Async.sleep(2.0))
         -- Close board after processing Round 2
         await(TournamentFlow.hide_board_from_all(tournament_id))
         await(Async.sleep(0.5))
@@ -110,15 +110,15 @@ function TournamentFlow.run_tournament(tournament_id)
             return
         end
         
-        -- Show board for Round 3 results - NOW SHOULD SHOW ROUND 1 & 2 PROGRESS BARS
-        print("[Flow] Showing board for Round 3 results (with Round 1 & 2 progress bars)")
-        await(TournamentFlow.show_board_to_all(tournament_id, "current"))
+        -- Show board for Round 3 results - NOW SHOULD SHOW ROUND 1 & 2 PROGRESS BARS ONLY
+        print("[Flow] Showing board for Round 3 results (with Round 1 & 2 progress bars only)")
+        await(TournamentFlow.show_board_to_all(tournament_id, "current", true))
         await(Async.sleep(1.5))
         
         -- Process Round 3 matches one by one (spawns Round 3 progress bar, greyscales loser, moves champion)
         print("[Flow] Processing Round 3 match...")
         await(TournamentFlow.process_round_one_by_one(tournament_id, 3))
-        
+        await(Async.sleep(2.0))
         -- Final champion announcement
         await(Async.sleep(1.0))
         await(TournamentFlow.announce_champion(tournament_id))
@@ -758,7 +758,7 @@ function TournamentFlow.announce_champion(tournament_id)
 end
 
 -- Show board to all players
-function TournamentFlow.show_board_to_all(tournament_id, view_type)
+function TournamentFlow.show_board_to_all(tournament_id, view_type, show_all_progress_bars)
     return async(function()
         local TournamentCore = require("scripts/net-game-tourney/tournament-core")
         local TournamentUI = require("scripts/net-game-tourney/tournament-ui")
@@ -792,13 +792,13 @@ function TournamentFlow.show_board_to_all(tournament_id, view_type)
                 TournamentUI.show_transition(player_id, false, 0.3)
                 await(Async.sleep(0.3))
                 
-                TournamentUI.show_board(player_id, tournament, view_type)
+                TournamentUI.show_board(player_id, tournament, view_type, show_all_progress_bars or false)
                 
                 TournamentUI.show_transition(player_id, true, 0.3)
                 await(Async.sleep(0.3))
                 
-                print(string.format("[Flow] Board shown to player %s (tournament %d, current round: %d)", 
-                      player_id, tournament_id, tournament.current_round or 0))
+                print(string.format("[Flow] Board shown to player %s (tournament %d, current round: %d, show_all: %s)", 
+                      player_id, tournament_id, tournament.current_round or 0, tostring(show_all_progress_bars)))
             end
         end
     end)
