@@ -55,7 +55,7 @@ function TournamentFlow.run_tournament(tournament_id)
             return
         end
         
-        -- Show board for Round 1 with no progress bars (no matches completed yet)
+        -- Show board for Round 1 with no progress bars (no matches processed yet)
         await(TournamentFlow.show_board_to_all(tournament_id, "current"))
         await(Async.sleep(1.5))
         
@@ -85,12 +85,11 @@ function TournamentFlow.run_tournament(tournament_id)
         end
         
         -- Show board for Round 2 (Round 1 progress bars and losers already displayed)
-        await(TournamentFlow.show_board_to_all(tournament_id, "current")) -- This now shows only previous round progress bars
+        await(TournamentFlow.show_board_to_all(tournament_id, "current"))
         await(Async.sleep(1.5))
-
-        -- Then process Round 2 matches one by one (which spawns Round 2 progress bars)
+        
+        -- Process Round 2 matches one by one
         await(TournamentFlow.process_round_one_by_one(tournament_id, 2))
-
         
         -- Close board after processing Round 2
         await(TournamentFlow.hide_board_from_all(tournament_id))
@@ -108,10 +107,10 @@ function TournamentFlow.run_tournament(tournament_id)
         end
         
         -- Show board for Round 3 (Round 1-2 progress bars and losers already displayed)
-        await(TournamentFlow.show_board_to_all(tournament_id, "current")) -- This shows Rounds 1-2 progress bars
+        await(TournamentFlow.show_board_to_all(tournament_id, "current"))
         await(Async.sleep(1.5))
-            
-        -- Then process Round 3 matches one by one (which spawns Round 3 progress bar)
+        
+        -- Process Round 3 matches one by one
         await(TournamentFlow.process_round_one_by_one(tournament_id, 3))
         
         -- Final champion announcement
@@ -144,7 +143,7 @@ function TournamentFlow.process_round_one_by_one(tournament_id, round)
         
         print(string.format("[Flow] Processing round %d one by one, matches: %d", round, #matches))
         
-        -- IMPORTANT: For rounds 2 and 3, greyscale ALL previous losers BEFORE processing current round
+        -- For Rounds 2 and 3: ensure all previous losers are greyscaled before processing
         if round >= 2 then
             -- Greyscale all losers from previous rounds first
             print(string.format("[Flow] Greyscaling all losers from previous rounds for round %d", round))
@@ -337,12 +336,15 @@ function TournamentFlow.spawn_progress_bar_for_match(tournament_id, round, match
             -- Update UI for all players to show the progress bar
             for _, participant in ipairs(tournament.participants) do
                 if participant.type == "player" and Net.is_player(participant.id) then
+                    local player_id = participant.id
                     local bottom_positions = ui_positions.get_progress_bar_positions("bottom")
                     if bottom_positions[progress_bar_index] then
-                        TournamentUI.add_progress_bar(participant.id, "TIER1_" .. progress_bar_index, "bottom", 
+                        TournamentUI.add_progress_bar(player_id, "TIER1_" .. progress_bar_index, "bottom", 
                             bottom_positions[progress_bar_index].x, bottom_positions[progress_bar_index].y, 
                             bottom_positions[progress_bar_index].z, progress_bar_index)
-                        TournamentUI.mark_progress_bar_spawned(tournament_id, participant.id, winner.id, "tier1")
+                        TournamentUI.mark_progress_bar_spawned(tournament_id, player_id, winner.id, "tier1")
+                        -- Mark Round 1 as processed for this player
+                        TournamentUI.mark_round_processed(tournament_id, player_id, 1)
                     end
                 end
             end
@@ -354,12 +356,15 @@ function TournamentFlow.spawn_progress_bar_for_match(tournament_id, round, match
             -- Update UI for all players to show the progress bar
             for _, participant in ipairs(tournament.participants) do
                 if participant.type == "player" and Net.is_player(participant.id) then
+                    local player_id = participant.id
                     local middle_positions = ui_positions.get_progress_bar_positions("middle")
                     if middle_positions[progress_bar_index] then
-                        TournamentUI.add_progress_bar(participant.id, "TIER2_" .. progress_bar_index, "middle", 
+                        TournamentUI.add_progress_bar(player_id, "TIER2_" .. progress_bar_index, "middle", 
                             middle_positions[progress_bar_index].x, middle_positions[progress_bar_index].y, 
                             middle_positions[progress_bar_index].z, progress_bar_index)
-                        TournamentUI.mark_progress_bar_spawned(tournament_id, participant.id, winner.id, "tier2")
+                        TournamentUI.mark_progress_bar_spawned(tournament_id, player_id, winner.id, "tier2")
+                        -- Mark Round 2 as processed for this player
+                        TournamentUI.mark_round_processed(tournament_id, player_id, 2)
                     end
                 end
             end
@@ -371,12 +376,15 @@ function TournamentFlow.spawn_progress_bar_for_match(tournament_id, round, match
             -- Update UI for all players to show the progress bar
             for _, participant in ipairs(tournament.participants) do
                 if participant.type == "player" and Net.is_player(participant.id) then
+                    local player_id = participant.id
                     local top_positions = ui_positions.get_progress_bar_positions("top")
                     if top_positions[progress_bar_index] then
-                        TournamentUI.add_progress_bar(participant.id, "TIER3_" .. progress_bar_index, "top", 
+                        TournamentUI.add_progress_bar(player_id, "TIER3_" .. progress_bar_index, "top", 
                             top_positions[progress_bar_index].x, top_positions[progress_bar_index].y, 
                             top_positions[progress_bar_index].z, progress_bar_index)
-                        TournamentUI.mark_progress_bar_spawned(tournament_id, participant.id, winner.id, "tier3")
+                        TournamentUI.mark_progress_bar_spawned(tournament_id, player_id, winner.id, "tier3")
+                        -- Mark Round 3 as processed for this player
+                        TournamentUI.mark_round_processed(tournament_id, player_id, 3)
                     end
                 end
             end

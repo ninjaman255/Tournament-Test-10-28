@@ -11,16 +11,43 @@ local greyscale_tracking = {} -- tournament_id -> {player_id -> {participant_id 
 -- Track progress bars per participant per round
 local progress_bar_tracking = {} -- tournament_id -> {player_id -> {participant_id -> {tier1 = true, tier2 = true, tier3 = true}}}
 
+-- Track which rounds have been processed for each player
+local processed_rounds_tracking = {} -- tournament_id -> {player_id -> {round = true}}
+
+-- Mark a round as processed for a player
+function TournamentUI.mark_round_processed(tournament_id, player_id, round)
+    if not tournament_id then return end
+    if not processed_rounds_tracking[tournament_id] then
+        processed_rounds_tracking[tournament_id] = {}
+    end
+    if not processed_rounds_tracking[tournament_id][player_id] then
+        processed_rounds_tracking[tournament_id][player_id] = {}
+    end
+    processed_rounds_tracking[tournament_id][player_id][round] = true
+end
+
+-- Check if a round has been processed for a player
+function TournamentUI.is_round_processed(tournament_id, player_id, round)
+    if not tournament_id then return false end
+    return processed_rounds_tracking[tournament_id] 
+           and processed_rounds_tracking[tournament_id][player_id]
+           and processed_rounds_tracking[tournament_id][player_id][round]
+end
+
+-- Clear processed rounds tracking
+function TournamentUI.clear_processed_rounds_tracking(player_id, tournament_id)
+    if not tournament_id then return end
+    if processed_rounds_tracking[tournament_id] then
+        processed_rounds_tracking[tournament_id][player_id] = nil
+    end
+end
+
 -- Clear progress bar tracking for a player in a tournament
 function TournamentUI.clear_progress_bar_tracking(player_id, tournament_id)
     if not tournament_id then return end
     if progress_bar_tracking[tournament_id] then
         progress_bar_tracking[tournament_id][player_id] = nil
     end
-end
-
-function TournamentUI.get_current_round(tournament_data)
-    return tournament_data.current_round or 0
 end
 
 -- Mark a progress bar tier as spawned for a participant
@@ -137,21 +164,23 @@ function TournamentUI.apply_existing_greyscale(player_id, tournament_data)
     end
 end
 
--- Updated function to show only previous round progress bars
-function TournamentUI.show_previous_round_progress_bars(player_id, tournament_data)
-    local current_round = tournament_data.current_round or 0
+-- Show progress bars from all completed rounds
+function TournamentUI.show_all_progress_bars(player_id, tournament_data)
+    local round = tournament_data.current_round or 0
     
-    -- Show progress bars for all completed rounds (previous rounds only)
-    for r = 1, current_round - 1 do
+    -- Show progress bars for all completed rounds
+    for r = 1, round - 1 do
         TournamentUI.show_progress_bars_for_specific_round(player_id, tournament_data, r)
     end
-    
-    print(string.format("[UI] Showed progress bars for rounds 1 to %d (current round: %d)", 
-          math.max(0, current_round - 1), current_round))
 end
 
--- Show progress bars for a specific round
+-- Show progress bars for a specific round (only if round has been processed)
 function TournamentUI.show_progress_bars_for_specific_round(player_id, tournament_data, round)
+    -- Only show progress bars for rounds that have been processed for this player
+    if not TournamentUI.is_round_processed(tournament_data.id, player_id, round) then
+        return
+    end
+    
     local ui_positions = require("scripts/net-game-tourney/ui-pos")
     
     if round == 1 and tournament_data.matches.round1 then
@@ -199,6 +228,19 @@ function TournamentUI.show_progress_bars_for_specific_round(player_id, tournamen
             end
         end
     end
+end
+
+-- Updated function to show only previous round progress bars
+function TournamentUI.show_previous_round_progress_bars(player_id, tournament_data)
+    local current_round = tournament_data.current_round or 0
+    
+    -- Show progress bars for all completed rounds (previous rounds only)
+    for r = 1, current_round - 1 do
+        TournamentUI.show_progress_bars_for_specific_round(player_id, tournament_data, r)
+    end
+    
+    print(string.format("[UI] Showed progress bars for rounds 1 to %d (current round: %d)", 
+          math.max(0, current_round - 1), current_round))
 end
 
 -- Show participants at initial positions (all at bottom)
@@ -410,10 +452,11 @@ function TournamentUI.cleanup(player_id, tournament_id)
         games.remove_ui_element(element, player_id)
     end
     
-    -- Clear greyscale tracking for this player in this tournament
+    -- Clear tracking for this player in this tournament
     if tournament_id then
         TournamentUI.clear_greyscale_tracking(player_id, tournament_id)
         TournamentUI.clear_progress_bar_tracking(player_id, tournament_id)
+        TournamentUI.clear_processed_rounds_tracking(player_id, tournament_id)
     end
     
     print("[UI] Cleaned UI for " .. player_id)
@@ -428,6 +471,11 @@ function TournamentUI.show_transition(player_id, fade_in, duration)
     else
         Net.fade_player_camera(player_id, { r = 0, g = 0, b = 0, a = 255 }, duration)
     end
+end
+
+-- Get the current round from tournament data
+function TournamentUI.get_current_round(tournament_data)
+    return tournament_data.current_round or 0
 end
 
 return TournamentUI
