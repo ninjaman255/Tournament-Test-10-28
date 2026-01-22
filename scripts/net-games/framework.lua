@@ -18,7 +18,7 @@ Goals:
 -- ============================================================
 local Displayer_ok, Displayer = pcall(require, "scripts/net-games/displayer/displayer")
 local DISPLAYER_READY = false
-require("scripts/net-games/displayer/demo_core_overlay")
+-- require("scripts/net-games/displayer/demo_core_overlay")
 
 if Displayer_ok and Displayer and Displayer.init and Displayer.isValid then
   local ok = false
@@ -128,16 +128,16 @@ end
 -- ============================================================
 local function provide_framework_assets(player_id)
   -- Some assets won't load reliably unless provided on join.
-  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts_compressed.png") end)
-  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts_dark_compressed.png") end)
+  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts/fonts_compressed.png") end)
+  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts/fonts_dark_compressed.png") end)
 
-  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts_wide.animation") end)
-  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts_gradient.animation") end)
-  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts_thick.animation") end)
-  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts_battle.animation") end)
-  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts_thin.animation") end)
-  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts_tiny.animation") end)
-  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts_compressed.animation") end)
+  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts/fonts_wide.animation") end)
+  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts/fonts_gradient.animation") end)
+  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts/fonts_thick.animation") end)
+  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts/fonts_battle.animation") end)
+  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts/fonts_thin.animation") end)
+  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts/fonts_tiny.animation") end)
+  pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts/fonts_compressed.animation") end)
 end
 
 -- ============================================================
@@ -370,7 +370,7 @@ end
 -- ============================================================
 -- UI elements (screen-space sprites)
 -- ============================================================
-function frame.add_ui_element(sprite_id, player_id, texture_path, animation_path, animation_state, X, Y, Z, ScaleX, ScaleY)
+function frame.add_ui_element(sprite_id, player_id, texture_path, animation_path, animation_state, X, Y, Z, ScaleX, ScaleY, properties)
   local scaleX = (ScaleX ~= nil and ScaleX >= 0.0) and ScaleX or 2.0
   local scaleY = (ScaleY ~= nil and ScaleY >= 0.0) and ScaleY or 2.0
   animation_path = animation_path or ""
@@ -388,7 +388,6 @@ function frame.add_ui_element(sprite_id, player_id, texture_path, animation_path
 
   -- Allocate sprite (safe even if alloc_id matches prior; Net tends to ignore duplicates)
   Net.player_alloc_sprite(player_id, alloc_id, { texture_path = texture_path, anim_path = animation_path, anim_state = animation_state })
-
   -- Draw under the requested draw id (separate from alloc_id)
   local draw_params = {
     id = sprite_id .. "_obj",
@@ -448,10 +447,16 @@ function frame.update_ui_element(sprite_id, player_id, properties)
     element.rotation = rotation
   end
 
-  if properties.opacity or properties.a then
-    local opacity = properties.opacity or properties.a
+  if properties.opacity then
+    local opacity = properties.opacity
     draw.opacity = opacity
     element.opacity = opacity
+  end
+
+  if properties.a then
+    local a = properties.a
+    draw.a = properties.a
+    element.a = properties.a
   end
 
   if properties.animation_state then
