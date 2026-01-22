@@ -51,6 +51,24 @@ local constants = {
         },
     },
     
+    -- Progress bar overlays (for one-by-one display)
+    progress_bar_overlay = {
+        blue_moon = {
+            bottom_tier = {
+                texture = "/server/assets/tourney/tourney-board-elements/progress-bar-overlays/blue-moon/bottom-tier.png",
+                anim = "/server/assets/tourney/tourney-board-elements/progress-bar-overlays/bottom-tier.anim",
+            },
+            middle_tier = {
+                texture = "/server/assets/tourney/tourney-board-elements/progress-bar-overlays/blue-moon/middle-tier.png",
+                anim = "/server/assets/tourney/tourney-board-elements/progress-bar-overlays/middle-tier.anim",
+            },
+            top_tier = {
+                texture = "/server/assets/tourney/tourney-board-elements/progress-bar-overlays/blue-moon/top-tier.png",
+                anim = "/server/assets/tourney/tourney-board-elements/progress-bar-overlays/top-tier.anim",
+            }
+        },
+    },
+    
     -- Bracket graphics
     bracket_bm_bn4 = "/server/assets/tourney/tourney-board-elements/bracket-bm.png",
     bracket_rs_bn4 = "/server/assets/tourney/tourney-board-elements/bracket-rs.png",

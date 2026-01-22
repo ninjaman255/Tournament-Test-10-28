@@ -14,6 +14,9 @@ local progress_bar_tracking = {} -- tournament_id -> {player_id -> {participant_
 -- Track which rounds have been processed for each player
 local processed_rounds_tracking = {} -- tournament_id -> {player_id -> {round = true}}
 
+-- Track progress bar overlays per player per tournament
+local progress_bar_overlay_tracking = {} -- tournament_id -> {player_id -> {element_id = true}}
+
 -- Mark a round as processed for a player
 function TournamentUI.mark_round_processed(tournament_id, player_id, round)
     if not tournament_id then return end
@@ -102,6 +105,49 @@ function TournamentUI.is_greyscale(tournament_id, player_id, participant_id)
            and greyscale_tracking[tournament_id][player_id][participant_id]
 end
 
+-- Clear overlay tracking for a player in a tournament
+function TournamentUI.clear_progress_bar_overlay_tracking(player_id, tournament_id)
+    if not tournament_id then return end
+    if progress_bar_overlay_tracking[tournament_id] then
+        progress_bar_overlay_tracking[tournament_id][player_id] = nil
+    end
+end
+
+-- Mark an overlay as active for a player
+function TournamentUI.mark_overlay_active(tournament_id, player_id, element_id)
+    if not tournament_id then return end
+    if not progress_bar_overlay_tracking[tournament_id] then
+        progress_bar_overlay_tracking[tournament_id] = {}
+    end
+    if not progress_bar_overlay_tracking[tournament_id][player_id] then
+        progress_bar_overlay_tracking[tournament_id][player_id] = {}
+    end
+    progress_bar_overlay_tracking[tournament_id][player_id][element_id] = true
+end
+
+-- Check if an overlay is active for a player
+function TournamentUI.has_overlay_active(tournament_id, player_id, element_id)
+    if not tournament_id then return false end
+    return progress_bar_overlay_tracking[tournament_id] 
+           and progress_bar_overlay_tracking[tournament_id][player_id]
+           and progress_bar_overlay_tracking[tournament_id][player_id][element_id]
+end
+
+-- Remove all overlays for a player
+function TournamentUI.remove_all_overlays(player_id, tournament_id)
+    if not tournament_id then return end
+    
+    if progress_bar_overlay_tracking[tournament_id] and 
+       progress_bar_overlay_tracking[tournament_id][player_id] then
+        
+        for element_id, _ in pairs(progress_bar_overlay_tracking[tournament_id][player_id]) do
+            games.remove_ui_element(element_id, player_id)
+        end
+        
+        progress_bar_overlay_tracking[tournament_id][player_id] = {}
+    end
+end
+
 -- Show tournament board to a player
 function TournamentUI.show_board(player_id, tournament_data, view_type, show_all_progress_bars)
     if not player_id or not tournament_data then
@@ -154,7 +200,12 @@ function TournamentUI.cleanup_ui_elements(player_id)
         "TITLE_BANNER", "CROWN_1", "CROWN_2", "CHAMPION_INDICATOR",
         "TIER1_1", "TIER1_2", "TIER1_3", "TIER1_4", "TIER1_5", "TIER1_6", "TIER1_7", "TIER1_8",
         "TIER2_1", "TIER2_2", "TIER2_3", "TIER2_4",
-        "TIER3_1", "TIER3_2"
+        "TIER3_1", "TIER3_2",
+        -- Also clean up any overlays
+        "TIER1_1_OVERLAY", "TIER1_2_OVERLAY", "TIER1_3_OVERLAY", "TIER1_4_OVERLAY", 
+        "TIER1_5_OVERLAY", "TIER1_6_OVERLAY", "TIER1_7_OVERLAY", "TIER1_8_OVERLAY",
+        "TIER2_1_OVERLAY", "TIER2_2_OVERLAY", "TIER2_3_OVERLAY", "TIER2_4_OVERLAY",
+        "TIER3_1_OVERLAY", "TIER3_2_OVERLAY"
     }
     
     for _, element in ipairs(elements) do
@@ -173,6 +224,7 @@ function TournamentUI.cleanup(player_id, tournament_id)
         TournamentUI.clear_greyscale_tracking(player_id, tournament_id)
         TournamentUI.clear_progress_bar_tracking(player_id, tournament_id)
         TournamentUI.clear_processed_rounds_tracking(player_id, tournament_id)
+        TournamentUI.clear_progress_bar_overlay_tracking(player_id, tournament_id)
     end
     
     print("[UI] Cleaned UI and tracking for " .. player_id)
@@ -448,13 +500,13 @@ function TournamentUI.add_mugshot(player_id, index, mugshot_texture, x, y, z)
     -- Frame
     games.add_ui_element(frame_id, player_id,
         constants.mug_frame_texture_path,
-        constants.mug_frame_anim_path, "ACTIVE", x, y, 3)
+        constants.mug_frame_anim_path, "ACTIVE", x, y, 4)
     
     -- Mugshot
     games.add_ui_element(mug_id, player_id,
         mugshot_texture,
         constants.default_mug_anim,
-        "UI", x, y, 2, 1, 1)
+        "UI", x, y, 3, 1, 1)
 end
 
 -- Add a progress bar with alternating direction based on position in tier
@@ -483,6 +535,51 @@ function TournamentUI.add_progress_bar(player_id, element_id, tier, x, y, z, pos
     
     print(string.format("[UI] Added progress bar %s at tier %s with anim %s (index: %d)", 
           element_id, tier, anim_state, position_index))
+end
+
+-- Add a progress bar with overlay (for one-by-one display)
+function TournamentUI.add_progress_bar_with_overlay(player_id, element_id, tier, x, y, z, position_index, overlay_x, overlay_y, overlay_z)
+    local progress_bar_paths = constants.progress_bar_path
+    local progress_bar_overlay_paths = constants.progress_bar_overlay
+    
+    local anim_state = "INACTIVE"
+    
+    -- Determine direction based on position index (odd = left, even = right)
+    if tier == "bottom" then
+        anim_state = (position_index % 2 == 1) and "L1_MOVE" or "R1_MOVE"
+    elseif tier == "middle" then
+        anim_state = (position_index % 2 == 1) and "L2_MOVE" or "R2_MOVE"
+    elseif tier == "top" then
+        anim_state = (position_index % 2 == 1) and "L3_MOVE" or "R3_MOVE"
+    end
+    
+    -- Add the progress bar
+    games.add_ui_element(element_id, player_id,
+        progress_bar_paths[tier .. "_tier"].texture,
+        progress_bar_paths[tier .. "_tier"].anim,
+        anim_state, x, y, z)
+    
+    -- Add the overlay (only for one-by-one display)
+    local overlay_id = element_id .. "_OVERLAY"
+
+    games.add_ui_element(overlay_id, player_id,
+        progress_bar_overlay_paths.blue_moon[tier.."_tier"].texture,
+        progress_bar_overlay_paths.blue_moon[tier.."_tier"].anim,
+        anim_state,
+        overlay_x,
+        overlay_y,
+        overlay_z)
+    
+    print(string.format("[UI] Added progress bar %s at tier %s with overlay (index: %d)", 
+          element_id, tier, position_index))
+    
+    return overlay_id
+end
+
+-- Remove progress bar overlay
+function TournamentUI.remove_progress_bar_overlay(player_id, overlay_id)
+    games.remove_ui_element(overlay_id, player_id)
+    print(string.format("[UI] Removed progress bar overlay %s for player %s", overlay_id, player_id))
 end
 
 -- Cleanup participants

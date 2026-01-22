@@ -193,7 +193,7 @@ function TournamentManager.handle_board_interaction(player_id, board_object, are
                 
                 -- Start countdown
                 games.activate_framework(player_id)
-                games.spawn_countdown(100, player_id, 100, 0, 30, false)
+                games.spawn_countdown(100, player_id, tournament_ui.queue_timer_position.x, tournament_ui.queue_timer_position.y, 30, false)
                 queue.countdown_player = player_id
                 queue.countdown_end = os.time() + 30
                 
@@ -239,7 +239,7 @@ function TournamentManager.handle_board_interaction(player_id, board_object, are
                     -- Remove old countdown
                     games.remove_ui_element("countdown", queue.countdown_player)
                     -- Start new countdown
-                    games.spawn_countdown(100, queue.countdown_player, 110, 10, 30, false)
+                    games.spawn_countdown(100, queue.countdown_player, tournament_ui.queue_timer_position.x, tournament_ui.queue_timer_position.y, 30, false)
                     queue.countdown_end = os.time() + 30
                 end
             else
@@ -378,7 +378,7 @@ Net:on("countdown_ended", function(event)
                     end
                     
                 elseif choice == 1 then -- Wait longer
-                    games.spawn_countdown(100, player_id, 100, 0, 30, false)
+                    games.spawn_countdown(100, player_id, tournament_ui.queue_timer_position.x, tournament_ui.queue_timer_position.y, 30, false)
                     queue.countdown_end = os.time() + 30
                     
                 else -- Cancel

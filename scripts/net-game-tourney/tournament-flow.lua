@@ -60,7 +60,7 @@ function TournamentFlow.run_tournament(tournament_id)
         await(TournamentFlow.show_board_to_all(tournament_id, "current", false))
         await(Async.sleep(2.0))
         
-        -- Process Round 1 matches one by one (spawns progress bars, greyscales losers, moves winners)
+        -- Process Round 1 matches one by one (spawns progress bars with overlays, greyscales losers, moves winners)
         print("[Flow] Processing Round 1 matches one by one...")
         await(TournamentFlow.process_round_one_by_one(tournament_id, 1))
         await(Async.sleep(2.0))
@@ -92,7 +92,7 @@ function TournamentFlow.run_tournament(tournament_id)
         await(TournamentFlow.show_board_to_all(tournament_id, "current", false))
         await(Async.sleep(2.0))
         
-        -- Process Round 2 matches one by one (spawns Round 2 progress bars, greyscales losers, moves winners)
+        -- Process Round 2 matches one by one (spawns Round 2 progress bars with overlays, greyscales losers, moves winners)
         print("[Flow] Processing Round 2 matches one by one...")
         await(TournamentFlow.process_round_one_by_one(tournament_id, 2))
         await(Async.sleep(2.0))
@@ -116,7 +116,7 @@ function TournamentFlow.run_tournament(tournament_id)
         await(TournamentFlow.show_board_to_all(tournament_id, "current", true))
         await(Async.sleep(1.5))
         
-        -- Process Round 3 matches one by one (spawns Round 3 progress bar, greyscales loser, moves champion)
+        -- Process Round 3 matches one by one (spawns Round 3 progress bar with overlay, greyscales loser, moves champion)
         print("[Flow] Processing Round 3 match...")
         await(TournamentFlow.process_round_one_by_one(tournament_id, 3))
         await(Async.sleep(2.0))
@@ -162,26 +162,25 @@ function TournamentFlow.process_round_one_by_one(tournament_id, round)
             if match.completed then
                 print(string.format("[Flow] Processing match %d in round %d", match_index, round))
                 
-                -- 1. FIRST: Spawn progress bar for the winner (based on tier and who won)
-                if match.winner then
-                    print(string.format("[Flow] Spawning progress bar for winner: %s", match.winner.name))
-                    await(TournamentFlow.spawn_progress_bar_for_match(tournament_id, round, match_index))
-                    await(Async.sleep(0.5))
-                end
-                
-                -- 2. SECOND: Greyscale the loser for this match
-                if match.loser then
-                    print(string.format("[Flow] Greyscaling loser: %s", match.loser.name))
-                    await(TournamentFlow.greyscale_specific_loser(tournament_id, round, match_index))
-                    await(Async.sleep(0.5))
-                end
-                
-                -- 3. THIRD: Move the winner to their new position
-                if match.winner then
-                    print(string.format("[Flow] Moving winner: %s", match.winner.name))
-                    await(TournamentFlow.move_winner_for_match(tournament_id, round, match_index))
-                    await(Async.sleep(0.5))
-                end
+                -- 1. FIRST: Spawn progress bar for the winner WITH OVERLAY
+            if match.winner then
+                print(string.format("[Flow] Spawning progress bar with overlay for winner: %s", match.winner.name))
+                await(TournamentFlow.spawn_progress_bar_for_match(tournament_id, round, match_index))
+                await(Async.sleep(0.6))  -- CHANGED from 0.5 to 1.0
+            end
+            
+            -- 2. SECOND: Greyscale the loser for this match
+            if match.loser then
+                print(string.format("[Flow] Greyscaling loser: %s", match.loser.name))
+                await(TournamentFlow.greyscale_specific_loser(tournament_id, round, match_index))
+            end
+            
+            -- 3. THIRD: Move the winner to their new position AND REMOVE OVERLAY
+            if match.winner then
+                print(string.format("[Flow] Moving winner: %s and removing overlay", match.winner.name))
+                await(TournamentFlow.move_winner_for_match(tournament_id, round, match_index))
+                await(Async.sleep(0.5))
+            end
                 
                 -- Wait between matches
                 if match_index < #matches then
@@ -310,7 +309,7 @@ function TournamentFlow.greyscale_specific_loser(tournament_id, round, match_ind
     end)
 end
 
--- Spawn progress bar for a specific match winner
+-- Spawn progress bar for a specific match winner WITH OVERLAY
 function TournamentFlow.spawn_progress_bar_for_match(tournament_id, round, match_index)
     return async(function()
         local TournamentCore = require("scripts/net-game-tourney/tournament-core")
@@ -339,17 +338,32 @@ function TournamentFlow.spawn_progress_bar_for_match(tournament_id, round, match
             -- Round 1: bottom tier progress bars
             progress_bar_index = ui_positions.get_progress_bar_index(1, match_index, winner_is_player1)
             
-            -- Update UI for all players to show the progress bar
+            -- Update UI for all players to show the progress bar WITH OVERLAY
             for _, participant in ipairs(tournament.participants) do
                 if participant.type == "player" and Net.is_player(participant.id) then
                     local player_id = participant.id
                     local bottom_positions = ui_positions.get_progress_bar_positions("bottom")
-                    if bottom_positions[progress_bar_index] then
-                        TournamentUI.add_progress_bar(player_id, "TIER1_" .. progress_bar_index, "bottom", 
-                            bottom_positions[progress_bar_index].x, bottom_positions[progress_bar_index].y, 
-                            bottom_positions[progress_bar_index].z, progress_bar_index)
+                    local bottom_overlays = ui_positions.progress_bar_overlays.bottom_tier
+                    
+                    if bottom_positions[progress_bar_index] and bottom_overlays[progress_bar_index] then
+                        -- Add progress bar with overlay
+                        local element_id = "TIER1_" .. progress_bar_index
+                        local overlay_id = element_id .. "overlay"
+                        TournamentUI.add_progress_bar_with_overlay(
+                            player_id, 
+                            element_id, 
+                            "bottom", 
+                            bottom_positions[progress_bar_index].x, 
+                            bottom_positions[progress_bar_index].y, 
+                            bottom_positions[progress_bar_index].z, 
+                            progress_bar_index,
+                            bottom_overlays[progress_bar_index].x,
+                            bottom_overlays[progress_bar_index].y,
+                            bottom_overlays[progress_bar_index].z
+                        )
+                        
                         TournamentUI.mark_progress_bar_spawned(tournament_id, player_id, winner.id, "tier1")
-                        -- Mark Round 1 as processed for this player
+                        TournamentUI.mark_overlay_active(tournament_id, player_id, overlay_id)
                         TournamentUI.mark_round_processed(tournament_id, player_id, 1)
                     end
                 end
@@ -359,17 +373,32 @@ function TournamentFlow.spawn_progress_bar_for_match(tournament_id, round, match
             -- Round 2: middle tier progress bars
             progress_bar_index = ui_positions.get_progress_bar_index(2, match_index, winner_is_player1)
             
-            -- Update UI for all players to show the progress bar
+            -- Update UI for all players to show the progress bar WITH OVERLAY
             for _, participant in ipairs(tournament.participants) do
                 if participant.type == "player" and Net.is_player(participant.id) then
                     local player_id = participant.id
                     local middle_positions = ui_positions.get_progress_bar_positions("middle")
-                    if middle_positions[progress_bar_index] then
-                        TournamentUI.add_progress_bar(player_id, "TIER2_" .. progress_bar_index, "middle", 
-                            middle_positions[progress_bar_index].x, middle_positions[progress_bar_index].y, 
-                            middle_positions[progress_bar_index].z, progress_bar_index)
+                    local middle_overlays = ui_positions.progress_bar_overlays.middle_tier
+                    
+                    if middle_positions[progress_bar_index] and middle_overlays[progress_bar_index] then
+                        -- Add progress bar with overlay
+                        local element_id = "TIER2_" .. progress_bar_index
+                        local overlay_id = element_id .. "overlay"
+                        TournamentUI.add_progress_bar_with_overlay(
+                            player_id, 
+                            element_id, 
+                            "middle", 
+                            middle_positions[progress_bar_index].x, 
+                            middle_positions[progress_bar_index].y, 
+                            middle_positions[progress_bar_index].z, 
+                            progress_bar_index,
+                            middle_overlays[progress_bar_index].x,
+                            middle_overlays[progress_bar_index].y,
+                            middle_overlays[progress_bar_index].z
+                        )
+                        
                         TournamentUI.mark_progress_bar_spawned(tournament_id, player_id, winner.id, "tier2")
-                        -- Mark Round 2 as processed for this player
+                        TournamentUI.mark_overlay_active(tournament_id, player_id, overlay_id)
                         TournamentUI.mark_round_processed(tournament_id, player_id, 2)
                     end
                 end
@@ -379,33 +408,49 @@ function TournamentFlow.spawn_progress_bar_for_match(tournament_id, round, match
             -- Round 3: top tier progress bar for champion
             progress_bar_index = ui_positions.get_progress_bar_index(3, match_index, winner_is_player1)
             
-            -- Update UI for all players to show the progress bar
+            -- Update UI for all players to show the progress bar WITH OVERLAY
             for _, participant in ipairs(tournament.participants) do
                 if participant.type == "player" and Net.is_player(participant.id) then
                     local player_id = participant.id
                     local top_positions = ui_positions.get_progress_bar_positions("top")
-                    if top_positions[progress_bar_index] then
-                        TournamentUI.add_progress_bar(player_id, "TIER3_" .. progress_bar_index, "top", 
-                            top_positions[progress_bar_index].x, top_positions[progress_bar_index].y, 
-                            top_positions[progress_bar_index].z, progress_bar_index)
+                    local top_overlays = ui_positions.progress_bar_overlays.top_tier
+                    
+                    if top_positions[progress_bar_index] and top_overlays[progress_bar_index] then
+                        -- Add progress bar with overlay
+                        local element_id = "TIER3_" .. progress_bar_index
+                        local overlay_id = element_id .. "overlay"
+                        TournamentUI.add_progress_bar_with_overlay(
+                            player_id, 
+                            element_id, 
+                            "top", 
+                            top_positions[progress_bar_index].x, 
+                            top_positions[progress_bar_index].y, 
+                            top_positions[progress_bar_index].z, 
+                            progress_bar_index,
+                            top_overlays[progress_bar_index].x,
+                            top_overlays[progress_bar_index].y,
+                            top_overlays[progress_bar_index].z
+                        )
+                        
                         TournamentUI.mark_progress_bar_spawned(tournament_id, player_id, winner.id, "tier3")
-                        -- Mark Round 3 as processed for this player
+                        TournamentUI.mark_overlay_active(tournament_id, player_id, overlay_id)
                         TournamentUI.mark_round_processed(tournament_id, player_id, 3)
                     end
                 end
             end
         end
         
-        print(string.format("[Flow] Spawned progress bar for winner %s in round %d match %d (is_player1: %s, index: %d)", 
+        print(string.format("[Flow] Spawned progress bar with overlay for winner %s in round %d match %d (is_player1: %s, index: %d)", 
               winner.name, round, match_index, tostring(winner_is_player1), progress_bar_index))
     end)
 end
 
--- Move winner for a specific match
+-- Move winner for a specific match AND REMOVE OVERLAY
 function TournamentFlow.move_winner_for_match(tournament_id, round, match_index)
     return async(function()
         local TournamentCore = require("scripts/net-game-tourney/tournament-core")
         local TournamentUI = require("scripts/net-game-tourney/tournament-ui")
+        local ui_positions = require("scripts/net-game-tourney/ui-pos")
         local games = require("scripts/net-games/framework")
         
         local tournament = TournamentCore.get_tournament(tournament_id)
@@ -419,6 +464,30 @@ function TournamentFlow.move_winner_for_match(tournament_id, round, match_index)
         
         local winner_id = match.winner.id
         local winner_name = match.winner.name
+        
+        -- Determine which participant won (player1 or player2) to get the correct overlay
+        local winner_is_player1 = (winner_id == match.player1.id)
+        local progress_bar_index = ui_positions.get_progress_bar_index(round, match_index, winner_is_player1)
+        
+        -- Remove overlay for all players
+        for _, participant in ipairs(tournament.participants) do
+            if participant.type == "player" and Net.is_player(participant.id) then
+                local player_id = participant.id
+                local overlay_id
+                
+                if round == 1 then
+                    overlay_id = "TIER1_" .. progress_bar_index .. "_OVERLAY"
+                elseif round == 2 then
+                    overlay_id = "TIER2_" .. progress_bar_index .. "_OVERLAY"
+                elseif round == 3 then
+                    overlay_id = "TIER3_" .. progress_bar_index .. "_OVERLAY"
+                end
+                
+                if overlay_id then
+                    TournamentUI.remove_progress_bar_overlay(player_id, overlay_id)
+                end
+            end
+        end
         
         -- Get new positions for this round
         local new_positions = TournamentCore.calculate_round_positions(tournament_id, round)
@@ -469,10 +538,10 @@ function TournamentFlow.move_winner_for_match(tournament_id, round, match_index)
                 end
             end
             
-            print(string.format("[Flow] Moved winner %s to new position (%d, %d)", 
+            print(string.format("[Flow] Moved winner %s to new position (%d, %d) and removed overlay", 
                   winner_name, new_pos.x, new_pos.y))
         else
-            print(string.format("[Flow] Winner %s already at correct position", winner_name))
+            print(string.format("[Flow] Winner %s already at correct position, removed overlay", winner_name))
         end
     end)
 end

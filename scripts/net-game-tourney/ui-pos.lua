@@ -83,6 +83,11 @@ UIPositions.progress_bar_overlays = {
     },
 }
 
+UIPositions.queue_timer_position = {
+    x = 100,
+    y = 20,
+}
+
 UIPositions.ui_element_positions = {
     -- Bracket elements
     tournament_tree = {x = 0, y = 0, z = 0},
