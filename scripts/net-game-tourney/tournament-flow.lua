@@ -514,7 +514,7 @@ function TournamentFlow.move_winner_for_match(tournament_id, round, match_index)
         end
         
         if not current_pos then return end
-        
+
         -- Only move if position changed
         if current_pos.x ~= new_pos.x or current_pos.y ~= new_pos.y then
             -- Update the tournament's UI state for this winner
