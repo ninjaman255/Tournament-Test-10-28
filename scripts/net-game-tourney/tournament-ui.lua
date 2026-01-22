@@ -238,7 +238,7 @@ function TournamentUI.cleanup_ui_elements(player_id)
     
     local elements = {
         "BOARD_BG", "BOARD_GRID", "TOURNEY_TREE", "CHAMPION_TOPPER",
-        "TITLE_BANNER", "CROWN_1", "CROWN_2", "CHAMPION_INDICATOR",
+        "CROWN_1", "CROWN_2", "CHAMPION_INDICATOR",
         "TIER1_1", "TIER1_2", "TIER1_3", "TIER1_4", "TIER1_5", "TIER1_6", "TIER1_7", "TIER1_8",
         "TIER2_1", "TIER2_2", "TIER2_3", "TIER2_4",
         "TIER3_1", "TIER3_2",
@@ -246,13 +246,15 @@ function TournamentUI.cleanup_ui_elements(player_id)
         "TIER1_1_OVERLAY", "TIER1_2_OVERLAY", "TIER1_3_OVERLAY", "TIER1_4_OVERLAY", 
         "TIER1_5_OVERLAY", "TIER1_6_OVERLAY", "TIER1_7_OVERLAY", "TIER1_8_OVERLAY",
         "TIER2_1_OVERLAY", "TIER2_2_OVERLAY", "TIER2_3_OVERLAY", "TIER2_4_OVERLAY",
-        "TIER3_1_OVERLAY", "TIER3_2_OVERLAY"
+        "TIER3_1_OVERLAY", "TIER3_2_OVERLAY",
+        -- Title Banner setup
+        "TITLE_BANNER",
     }
     
     for _, element in ipairs(elements) do
         games.remove_ui_element(element, player_id)
     end
-    
+    games.remove_text("TITLE_BANNER_TEXT", player_id)
     print("[UI] Cleaned UI elements for " .. player_id)
 end
 
@@ -494,6 +496,31 @@ function TournamentUI.setup_background(player_id, theme)
         bg_paths.grid_texture,
         constants.default_grid_anim_path_bn4,
         "UI", grid_pos.x, grid_pos.y, grid_pos.z)
+    
+    TournamentUI.setup_title_banner(player_id)
+end
+
+function TournamentUI.setup_title_banner(player_id, title_text)
+    -- Title banner
+    local banner_pos = ui_positions.ui_element_positions.title_banner
+    games.add_ui_element("TITLE_BANNER", player_id,
+        "/server/assets/tourney/title-banner.png",
+        "/server/assets/tourney/title-banner.anim",
+        "RED", banner_pos.x, banner_pos.y, banner_pos.z)
+    -- Title banner text
+    local text = "Custom Tournament"
+    if title_text ~= nil and title_text ~= "" then
+        text = title_text
+    end 
+
+    local text_width = games.get_text_width(text)
+    local half_text_width = text_width / 4
+    local screen_center = 120
+    
+    local text_x = screen_center - half_text_width
+    
+    print("WIDTH OF TITLE IS "..text_width.. " --IMPORTANT--")
+    games.draw_text("TITLE_BANNER_TEXT", player_id, text, text_x, 6, 1)
 end
 
 -- Setup bracket elements
@@ -511,13 +538,6 @@ function TournamentUI.setup_bracket_elements(player_id)
         constants.champion_topper_bn4,
         constants.champion_topper_bn4_anim,
         "UI", topper_pos.x, topper_pos.y, topper_pos.z)
-    
-    -- Title banner
-    local banner_pos = ui_positions.ui_element_positions.title_banner
-    games.add_ui_element("TITLE_BANNER", player_id,
-        "/server/assets/tourney/title-banner.png",
-        "/server/assets/tourney/title-banner.anim",
-        "RED", banner_pos.x, banner_pos.y, banner_pos.z)
     
     -- Crowns
     local crown1_pos = ui_positions.ui_element_positions.crown_1

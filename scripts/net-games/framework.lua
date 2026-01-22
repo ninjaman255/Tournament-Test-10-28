@@ -573,6 +573,39 @@ function frame.draw_text(text_id, player_id, text, x, y, z, font, scale)
   return true
 end
 
+-- NEW FUNCTION: Get text width before displaying it
+-- Returns the pixel width of text with given font and scale, or 0 if Displayer not available
+-- Parameters:
+--   text: The text string to measure
+--   font: Font name (optional, defaults to "THICK")
+--   scale: Scale factor (optional, defaults to 2.0)
+function frame.get_text_width(text, font, scale)
+  if not DISPLAYER_READY then 
+    print("[net-games][framework] get_text_width(): Displayer not available")
+    return 0 
+  end
+  
+  -- Check if Displayer.Font.getTextWidth exists
+  if Displayer.Font and Displayer.Font.getTextWidth then
+    -- Call the underlying font system to get text width
+    local width = Displayer.Font.getTextWidth(text, font or "THICK", scale or 2.0)
+    return width or 0
+  else
+    -- Fallback: try to access directly if the API structure is different
+    local success, width = pcall(function()
+      return Displayer.Font.getTextWidth(text, font or "THICK", scale or 2.0)
+    end)
+    
+    if success then
+      return width or 0
+    else
+      print("[net-games][framework] get_text_width(): Font subsystem not available")
+      return 0
+    end
+  end
+end
+
+
 function frame.update_text(text_id, player_id, text)
   if not DISPLAYER_READY then return false end
   Displayer.Text.updateText(player_id, text_id, tostring(text))
