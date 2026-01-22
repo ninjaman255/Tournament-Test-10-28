@@ -1,0 +1,24 @@
+!frame_rate 60
+!image_path "C:\Users\aaron\Documents\Code\Tournament-Test-10-28\assets\tourney\tourney-board-elements\progress-bar-overlays\blue-moon\middle-tier.png"
+
+anim L2_MOVE
+frame dur=6f x=0 y=0 w=34 h=42 originx=0 originy=0
+frame dur=6f x=34 y=0 w=34 h=42 originx=0 originy=0
+frame dur=6f x=68 y=0 w=34 h=42 originx=0 originy=0
+frame dur=6f x=102 y=0 w=34 h=42 originx=0 originy=0
+frame dur=6f x=136 y=0 w=34 h=42 originx=0 originy=0
+frame dur=6f x=170 y=0 w=34 h=42 originx=0 originy=0
+frame dur=6f x=204 y=0 w=34 h=42 originx=0 originy=0
+frame dur=6f x=238 y=0 w=34 h=42 originx=0 originy=0
+frame dur=6f x=272 y=0 w=34 h=42 originx=0 originy=0
+
+anim R2_MOVE
+frame dur=6f x=0 y=0 w=34 h=42 originx=0 originy=0 flipx=1
+frame dur=6f x=34 y=0 w=34 h=42 originx=0 originy=0 flipx=1
+frame dur=6f x=68 y=0 w=34 h=42 originx=0 originy=0 flipx=1
+frame dur=6f x=102 y=0 w=34 h=42 originx=0 originy=0 flipx=1
+frame dur=6f x=136 y=0 w=34 h=42 originx=0 originy=0 flipx=1
+frame dur=6f x=170 y=0 w=34 h=42 originx=0 originy=0 flipx=1
+frame dur=6f x=204 y=0 w=34 h=42 originx=0 originy=0 flipx=1
+frame dur=6f x=238 y=0 w=34 h=42 originx=0 originy=0 flipx=1
+frame dur=6f x=272 y=0 w=34 h=42 originx=0 originy=0 flipx=1
