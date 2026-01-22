@@ -10,6 +10,7 @@ local TournamentCore = require("scripts/net-game-tourney/tournament-core")
 local TournamentFlow = require("scripts/net-game-tourney/tournament-flow")
 local tournament_npcs = require("scripts/net-game-tourney/tournament-npcs")
 local tournament_ui = require("scripts/net-game-tourney/tournament-ui")
+local ui_pos = require("scripts/net-game-tourney/ui-pos")
 local constants = require("scripts/net-game-tourney/tournament-constants")
 
 local waiting_queues = {} -- board_id -> {players = {}, host_id, area_id}
@@ -193,7 +194,7 @@ function TournamentManager.handle_board_interaction(player_id, board_object, are
                 
                 -- Start countdown
                 games.activate_framework(player_id)
-                games.spawn_countdown(100, player_id, tournament_ui.queue_timer_position.x, tournament_ui.queue_timer_position.y, 30, false)
+                games.spawn_countdown(100, player_id, ui_pos.queue_timer_position.x, ui_pos.queue_timer_position.y, 30, false)
                 queue.countdown_player = player_id
                 queue.countdown_end = os.time() + 30
                 
@@ -239,7 +240,7 @@ function TournamentManager.handle_board_interaction(player_id, board_object, are
                     -- Remove old countdown
                     games.remove_ui_element("countdown", queue.countdown_player)
                     -- Start new countdown
-                    games.spawn_countdown(100, queue.countdown_player, tournament_ui.queue_timer_position.x, tournament_ui.queue_timer_position.y, 30, false)
+                    games.spawn_countdown(100, queue.countdown_player, ui_pos.queue_timer_position.x, ui_pos.queue_timer_position.y, 30, false)
                     queue.countdown_end = os.time() + 30
                 end
             else
@@ -378,7 +379,7 @@ Net:on("countdown_ended", function(event)
                     end
                     
                 elseif choice == 1 then -- Wait longer
-                    games.spawn_countdown(100, player_id, tournament_ui.queue_timer_position.x, tournament_ui.queue_timer_position.y, 30, false)
+                    games.spawn_countdown(100, player_id, ui_pos.queue_timer_position.x, ui_pos.queue_timer_position.y, 30, false)
                     queue.countdown_end = os.time() + 30
                     
                 else -- Cancel

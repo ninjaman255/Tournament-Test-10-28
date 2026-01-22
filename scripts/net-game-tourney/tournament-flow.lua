@@ -1,6 +1,7 @@
 -- tournament-flow.lua
 local TournamentFlow = {}
 local constants = require("scripts/net-game-tourney/tournament-constants")
+local ui_pos = require("scripts/net-game-tourney/ui-pos")
 
 -- Async/await helpers
 local async = function(p) local co = coroutine.create(p) return Async.promisify(co) end
@@ -8,6 +9,110 @@ local await = function(v) return Async.await(v) end
 
 -- Store original area states for restoration
 local original_area_states = {}
+
+function TournamentFlow.get_participant_position_index(tournament, participant_id)
+    if not tournament or not tournament.ui_state or not tournament.ui_state.positions then
+        return nil
+    end
+    
+    for i, position in ipairs(tournament.ui_state.positions) do
+        if position.participant_id == participant_id then
+            return i
+        end
+    end
+    
+    return nil
+end
+
+
+-- NEW: Squash winner before moving
+function TournamentFlow.squash_winner_before_move(tournament_id, round, match_index)
+    return async(function()
+        local TournamentCore = require("scripts/net-game-tourney/tournament-core")
+        local TournamentUI = require("scripts/net-game-tourney/tournament-ui")
+        
+        local tournament = TournamentCore.get_tournament(tournament_id)
+        if not tournament then return end
+        
+        local round_key = round == 1 and "round1" or (round == 2 and "round2" or "round3")
+        local matches = tournament.matches[round_key]
+        local match = matches[match_index]
+        
+        if not match or not match.completed or not match.winner then return end
+
+        local winner_id = match.winner.id
+        local winner_name = match.winner.name
+        -- Find the winner's current position index before moving
+        local current_index = nil
+        local mug_y = nil
+        for i, pos in ipairs(tournament.ui_state.positions) do
+            print(pos)
+            if pos.participant_id == winner_id then
+                current_index = i
+                mug_y = pos.y
+                break
+            end
+        end
+
+        if not current_index then return end
+        if not mug_y then return end
+        
+        print(string.format("[Flow] Squashing winner %s at position %d before move", winner_name, current_index))
+        
+        -- Apply squash effect to the winner for all players
+        for i, participant in ipairs(tournament.participants) do
+            print(participant)
+            if participant.type == "player" and Net.is_player(participant.id) then
+                TournamentUI.squash_mugshot(participant.id, current_index, mug_y)
+            end
+        end
+    end)
+end
+
+-- NEW: Unsquash winner after moving
+function TournamentFlow.unsquash_winner_after_move(tournament_id, round, match_index)
+    return async(function()
+        local TournamentCore = require("scripts/net-game-tourney/tournament-core")
+        local TournamentUI = require("scripts/net-game-tourney/tournament-ui")
+        
+        local tournament = TournamentCore.get_tournament(tournament_id)
+        if not tournament then return end
+        
+        local round_key = round == 1 and "round1" or (round == 2 and "round2" or "round3")
+        local matches = tournament.matches[round_key]
+        local match = matches[match_index]
+        
+        if not match or not match.completed or not match.winner then return end
+        
+        local winner_id = match.winner.id
+        local winner_name = match.winner.name
+
+        -- Find the winner's NEW position index after moving
+        local new_index = nil
+        local mug_y = nil
+        for i, pos in ipairs(tournament.ui_state.positions) do
+            print(pos)
+            if pos.participant_id == winner_id then
+                new_index = i
+                mug_y = pos.y
+                break
+            end
+        end
+        
+        if not new_index then return end
+        if not mug_y then return end
+
+        print(string.format("[Flow] Unsquashing winner %s at new position %d after move", winner_name, new_index, mug_y))
+        
+        -- Apply unsquash effect to the winner for all players
+        for i, participant in ipairs(tournament.participants) do
+            print(participant)
+            if participant.type == "player" and Net.is_player(participant.id) then
+                TournamentUI.unsquash_mugshot(participant.id, new_index, mug_y)
+            end
+        end
+    end)
+end
 
 -- Run a tournament
 function TournamentFlow.run_tournament(tournament_id)
@@ -129,8 +234,7 @@ function TournamentFlow.run_tournament(tournament_id)
         TournamentFlow.cleanup_tournament(tournament_id)
     end)
 end
-
--- Process a round one by one following the specified flow
+-- Update the process_round_one_by_one function in tournament-flow.lua
 function TournamentFlow.process_round_one_by_one(tournament_id, round)
     return async(function()
         local TournamentCore = require("scripts/net-game-tourney/tournament-core")
@@ -163,24 +267,31 @@ function TournamentFlow.process_round_one_by_one(tournament_id, round)
                 print(string.format("[Flow] Processing match %d in round %d", match_index, round))
                 
                 -- 1. FIRST: Spawn progress bar for the winner WITH OVERLAY
-            if match.winner then
-                print(string.format("[Flow] Spawning progress bar with overlay for winner: %s", match.winner.name))
-                await(TournamentFlow.spawn_progress_bar_for_match(tournament_id, round, match_index))
-                await(Async.sleep(0.6))  -- CHANGED from 0.5 to 1.0
-            end
-            
-            -- 2. SECOND: Greyscale the loser for this match
-            if match.loser then
-                print(string.format("[Flow] Greyscaling loser: %s", match.loser.name))
-                await(TournamentFlow.greyscale_specific_loser(tournament_id, round, match_index))
-            end
-            
-            -- 3. THIRD: Move the winner to their new position AND REMOVE OVERLAY
-            if match.winner then
-                print(string.format("[Flow] Moving winner: %s and removing overlay", match.winner.name))
-                await(TournamentFlow.move_winner_for_match(tournament_id, round, match_index))
-                await(Async.sleep(0.5))
-            end
+                if match.winner then
+                    print(string.format("[Flow] Spawning progress bar with overlay for winner: %s", match.winner.name))
+                    await(TournamentFlow.spawn_progress_bar_for_match(tournament_id, round, match_index))
+                    await(Async.sleep(0.6))  -- CHANGED from 0.5 to 1.0
+                end
+                
+                -- 2. SECOND: Greyscale the loser for this match
+                if match.loser then
+                    print(string.format("[Flow] Greyscaling loser: %s", match.loser.name))
+                    await(TournamentFlow.greyscale_specific_loser(tournament_id, round, match_index))
+                end
+                
+                -- 3. THIRD: Move the winner to their new position AND REMOVE OVERLAY
+                if match.winner then
+                    print(string.format("[Flow] Moving winner: %s and removing overlay", match.winner.name))
+                    
+                    -- NEW: Squash effect before moving
+                    await(TournamentFlow.squash_winner_before_move(tournament_id, round, match_index))
+                    await(Async.sleep(0.3))
+                    -- Move the winner
+                    await(TournamentFlow.move_winner_for_match(tournament_id, round, match_index))
+                    -- NEW: Unsquash after moving
+                    await(TournamentFlow.unsquash_winner_after_move(tournament_id, round, match_index))
+                    await(Async.sleep(0.3)) -- Pause after unsquash
+                end
                 
                 -- Wait between matches
                 if match_index < #matches then

@@ -431,14 +431,14 @@ function frame.update_ui_element(sprite_id, player_id, properties)
   if properties.scale then
     draw.sx = properties.scale
     draw.sy = properties.scale
-    element.scaleX = properties.scale
-    element.scaleY = properties.scale
+    element.sx = properties.scale
+    element.sy = properties.scale
   elseif properties.sx then
     draw.sx = properties.sx
-    element.scaleX = properties.sx
+    element.sx = properties.sx
   elseif properties.sy then
     draw.sy = properties.sy
-    element.scaleY = properties.sy
+    element.sy = properties.sy
   end
 
   if properties.rotation or properties.ro then
@@ -464,10 +464,25 @@ function frame.update_ui_element(sprite_id, player_id, properties)
     element.animation_state = properties.animation_state
   end
 
-  if properties.r then draw.r = properties.r; element.r = properties.r end
-  if properties.g then draw.g = properties.g; element.g = properties.g end
-  if properties.b then draw.b = properties.b; element.b = properties.b end
-  if properties.color_mode then draw.color_mode = properties.color_mode; element.color_mode = properties.color_mode end
+  if properties.r then
+    draw.r = properties.r 
+    element.r = properties.r 
+  end
+  
+  if properties.g then 
+    draw.g = properties.g
+    element.g = properties.g 
+  end
+  
+  if properties.b then
+    draw.b = properties.b
+    element.b = properties.b 
+  end
+  
+  if properties.color_mode then 
+    draw.color_mode = properties.color_mode 
+    element.color_mode = properties.color_mode 
+  end
 
   Net.player_draw_sprite(player_id, element.alloc_id, draw)
   return true

@@ -5,6 +5,10 @@ local constants = require("scripts/net-game-tourney/tournament-constants")
 local ui_positions = require("scripts/net-game-tourney/ui-pos")
 local games = require("scripts/net-games/framework")
 
+-- Async/await helpers
+local async = function(p) local co = coroutine.create(p) return Async.promisify(co) end
+local await = function(v) return Async.await(v) end
+
 -- Track greyscale participants per player AND per tournament
 local greyscale_tracking = {} -- tournament_id -> {player_id -> {participant_id = true}}
 
@@ -16,6 +20,43 @@ local processed_rounds_tracking = {} -- tournament_id -> {player_id -> {round = 
 
 -- Track progress bar overlays per player per tournament
 local progress_bar_overlay_tracking = {} -- tournament_id -> {player_id -> {element_id = true}}
+
+
+-- Squash a mugshot and its frame (compress in y-axis only)
+function TournamentUI.squash_mugshot(player_id, index, mugshot_y_pos)
+    return async(function() 
+        if not player_id or not index then return end
+        local mugshot_properties = {0.8, 0.6, 0.4, 0.2, 0.0}
+        local frame_properties = {1.7, 1.3, 0.9, 0.5, 0.0}
+
+        for i = 1, #mugshot_properties do
+            games.update_ui_element("MUG_" .. index, player_id, {sy =mugshot_properties[i]})
+            games.update_ui_element("MUG_FRAME_" .. index, player_id, {sy = frame_properties[i]})
+            await(Async.sleep(0.05))
+        end
+        -- Apply squash effect
+        
+        print(string.format("[UI] Squashed mugshot %d for player %s (mug: y=0.5, frame: y=0.25)", index, player_id))
+    end)
+end
+
+-- Unsquash a mugshot and its frame (restore original y-scale)
+function TournamentUI.unsquash_mugshot(player_id, index, mugshot_y_pos)
+    return async(function()
+        if not player_id or not index then return end
+        
+        local mugshot_properties = {0.2, 0.4, 0.6, 0.8, 1.0}
+        local frame_properties = {0.5, 0.9, 1.3, 1.7, 2.0 }
+    
+        for i = 1, #mugshot_properties do
+            games.update_ui_element("MUG_" .. index, player_id, {sy = mugshot_properties[i]})
+            games.update_ui_element("MUG_FRAME_" .. index, player_id, {sy = frame_properties[i]})
+            await(Async.sleep(0.05))
+        end
+    
+        print(string.format("[UI] Unsquashed mugshot %d for player %s (mug: y=1.0, frame: y=0.5)", index, player_id))
+    end)
+end
 
 -- Mark a round as processed for a player
 function TournamentUI.mark_round_processed(tournament_id, player_id, round)
