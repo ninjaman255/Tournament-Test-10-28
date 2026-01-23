@@ -25,7 +25,7 @@ function TournamentManager.init()
 end
 
 -- Create a single-player tournament
-function TournamentManager.create_single_player_tournament(player_id, board_id, area_id, theme)
+function TournamentManager.create_single_player_tournament(player_id, board_id, area_id, theme, title)
     return async(function()
         -- Get player info
         local player_name = Net.get_player_name(player_id) or "Player"
@@ -35,6 +35,7 @@ function TournamentManager.create_single_player_tournament(player_id, board_id, 
         local config = {
             host_id = player_id,
             theme = theme or "red_orange_bn4",
+            title = title,  -- Add title to config
             type = "single_player",
             board_id = board_id,
             area_id = area_id
@@ -129,28 +130,33 @@ function TournamentManager.handle_board_interaction(player_id, board_object, are
             return
         end
         
-        -- Get board theme
+        -- Get board theme and title from custom properties
         local theme = "red_orange_bn4"
-local board_title = nil
-if board_object.custom_properties then
-    theme = board_object.custom_properties["Board Background"] or 
-           board_object.custom_properties["board_theme"] or 
-           "red_orange_bn4"
-    -- Add this line to read the title property
-    board_title = board_object.custom_properties["Board Title"] or 
-                 board_object.custom_properties["board_title"]
-end
-
--- Then when creating the queue, store the title too:
-waiting_queues[board_id] = {
-    players = {player_id},
-    host_id = player_id,
-    area_id = area_id,
-    theme = theme,
-    title = board_title,   -- Store the title
-    waiting = false,
-    created_time = os.time()
-}
+        local board_title = nil
+        if board_object.custom_properties then
+            theme = board_object.custom_properties["Board Background"] or 
+                   board_object.custom_properties["board_theme"] or 
+                   "red_orange_bn4"
+            -- Read title property if it exists
+            board_title = board_object.custom_properties["Board Title"] or 
+                         board_object.custom_properties["board_title"]
+        end
+        
+        -- Check if there's a waiting queue for this board
+        local board_id = tostring(board_object.id)
+        local queue = waiting_queues[board_id]
+        
+        if not queue then
+            -- No existing queue, create a new one
+            waiting_queues[board_id] = {
+                players = {player_id},
+                host_id = player_id,
+                area_id = area_id,
+                theme = theme,
+                title = board_title,  -- Store the title
+                waiting = false,
+                created_time = os.time()
+            }
             queue = waiting_queues[board_id]
             
             -- Track player in global queue
@@ -202,7 +208,7 @@ waiting_queues[board_id] = {
                 queue.type = "single_player"
                 -- Create single player tournament immediately
                 local tournament_id = await(TournamentManager.create_single_player_tournament(
-                    player_id, board_id, area_id, theme
+                    player_id, board_id, area_id, theme, board_title
                 ))
                 
                 if tournament_id then
@@ -270,6 +276,7 @@ waiting_queues[board_id] = {
             local tournament_id = TournamentCore.create_tournament({
                 host_id = queue.host_id,
                 theme = queue.theme,
+                title = queue.title,  -- Pass the title
                 type = "multi_player",
                 board_id = board_id,
                 area_id = area_id
@@ -335,6 +342,7 @@ Net:on("countdown_ended", function(event)
                     local tournament_id = TournamentCore.create_tournament({
                         host_id = queue.host_id,
                         theme = queue.theme,
+                        title = queue.title,  -- Pass the title
                         type = "multi_player",
                         board_id = board_id,
                         area_id = queue.area_id

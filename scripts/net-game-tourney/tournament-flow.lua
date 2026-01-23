@@ -363,7 +363,7 @@ function TournamentFlow.greyscale_all_previous_losers(tournament_id, current_rou
                     for j, pos in ipairs(tournament.ui_state.positions) do
                         if pos.participant_id == loser_info.loser_id then
                             -- Apply greyscale effect
-                            games.update_ui_element("MUG_" .. j, player_id, constants.greyscale_properties)
+                            games.update_ui_element("MUG_" .. j, player_id, constants.sepia_properties)
                             
                             -- Mark as greyscale for tracking
                             TournamentUI.mark_greyscale(tournament_id, player_id, loser_info.loser_id)
@@ -406,7 +406,7 @@ function TournamentFlow.greyscale_specific_loser(tournament_id, round, match_ind
                 for j, pos in ipairs(tournament.ui_state.positions) do
                     if pos.participant_id == loser_id then
                         -- Apply greyscale effect
-                        games.update_ui_element("MUG_" .. j, player_id, constants.greyscale_properties)
+                        games.update_ui_element("MUG_" .. j, player_id, constants.sepia_properties)
                         
                         -- Mark as greyscale for tracking
                         TournamentUI.mark_greyscale(tournament_id, player_id, loser_id)

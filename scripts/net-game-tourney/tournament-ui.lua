@@ -202,8 +202,8 @@ function TournamentUI.show_board(player_id, tournament_data, view_type, show_all
     -- Cleanup any existing UI elements but DON'T clear tracking
     TournamentUI.cleanup_ui_elements(player_id)
     
-    -- Setup background
-    TournamentUI.setup_background(player_id, tournament_data.config.theme)
+    -- Setup background with optional title
+    TournamentUI.setup_background(player_id, tournament_data.config.theme, tournament_data.config.title)
     
     -- Setup bracket elements
     TournamentUI.setup_bracket_elements(player_id)
@@ -289,7 +289,7 @@ function TournamentUI.apply_existing_greyscale(player_id, tournament_data)
             for i, position in ipairs(tournament_data.ui_state.positions) do
                 if position.participant_id == participant_id then
                     -- Apply greyscale effect
-                    games.update_ui_element("MUG_" .. i, player_id, constants.greyscale_properties)
+                    games.update_ui_element("MUG_" .. i, player_id, constants.sepia_properties)
                     print(string.format("[UI] Applied existing greyscale to mugshot %d for player %s", i, player_id))
                     break
                 end
@@ -436,7 +436,7 @@ function TournamentUI.show_current_participants(player_id, tournament_data)
             
             -- Apply greyscale if this participant was marked as greyscale in any previous round
             if TournamentUI.is_greyscale(tournament_data.id, player_id, participant.id) then
-                games.update_ui_element("MUG_" .. i, player_id, constants.greyscale_properties)
+                games.update_ui_element("MUG_" .. i, player_id, constants.sepia_properties)
                 print(string.format("[UI] Starting with greyscaled mugshot %d for player %s", i, player_id))
             end
         end
@@ -462,7 +462,7 @@ function TournamentUI.show_champion_view(player_id, tournament_data)
         -- Apply greyscale to all non-champion participants
         for i, p in ipairs(tournament_data.participants) do
             if p.id ~= winner.id then
-                games.update_ui_element("MUG_" .. i, player_id, constants.greyscale_properties)
+                games.update_ui_element("MUG_" .. i, player_id, constants.sepia_properties)
                 -- Mark as greyscale for tracking
                 TournamentUI.mark_greyscale(tournament_data.id, player_id, p.id)
             end
@@ -473,8 +473,8 @@ function TournamentUI.show_champion_view(player_id, tournament_data)
     end
 end
 
--- Setup background
-function TournamentUI.setup_background(player_id, theme)
+-- Setup background with optional title
+function TournamentUI.setup_background(player_id, theme, title_text)
     theme = theme or "red_orange_bn4"
     local bg_paths = constants.bracket_background_path[theme]
     
@@ -497,7 +497,8 @@ function TournamentUI.setup_background(player_id, theme)
         constants.default_grid_anim_path_bn4,
         "UI", grid_pos.x, grid_pos.y, grid_pos.z)
     
-    TournamentUI.setup_title_banner(player_id)
+    -- Setup title banner with optional custom title
+    TournamentUI.setup_title_banner(player_id, title_text)
 end
 
 function TournamentUI.setup_title_banner(player_id, title_text)
@@ -520,7 +521,7 @@ function TournamentUI.setup_title_banner(player_id, title_text)
     local text_x = screen_center - half_text_width
     
     print("WIDTH OF TITLE IS "..text_width.. " --IMPORTANT--")
-    games.draw_text("TITLE_BANNER_TEXT", player_id, text, text_x, 6, 1)
+    games.draw_text("TITLE_BANNER_TEXT", player_id, text, text_x, 6, 1,nil,nil, {a = 255, r = 10, g = 155, b = 155, opacity =255, color_mode = 2})
 end
 
 -- Setup bracket elements

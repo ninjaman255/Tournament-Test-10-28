@@ -74,6 +74,7 @@
   <object id="5" type="Tournament Board" gid="57" x="211.5" y="288.5" width="64" height="57">
    <properties>
     <property name="Board Background" value="blue_bn4"/>
+    <property name="Board Title" value="TEST"/>
     <property name="Tournament Board Title" value="CUSTOM TOURNAMENT"/>
    </properties>
   </object>
