@@ -21,6 +21,33 @@ local function dprint_once(key, ...)
   print(...)
 end
 
+local _mh_ok, _mh = pcall(require, "scripts/net-games/math-helpers")
+
+local function _merge_props(...)
+  local out = {}
+  for i = 1, select('#', ...) do
+    local p = select(i, ...)
+    if type(p) == "table" then
+      for k, v in pairs(p) do out[k] = v end
+    end
+  end
+  return out
+end
+
+local function _prepare_draw_params(base_params, properties)
+  if _mh_ok and _mh and _mh.prepare_draw_params then
+    return _mh.prepare_draw_params(base_params, properties or {})
+  end
+  -- fallback: shallow merge
+  local draw_params = {}
+  for k, v in pairs(base_params) do draw_params[k] = v end
+  if type(properties) == "table" then
+    for k, v in pairs(properties) do draw_params[k] = v end
+  end
+  return draw_params
+end
+
+
 function ScrollingSpriteList:init()
     self.player_lists = {}
 
@@ -91,7 +118,7 @@ function ScrollingSpriteList:cleanupPlayerLists(player_id)
     dprint("DEBUG: Cleaned up player lists for " .. player_id)
 end
 
-function ScrollingSpriteList:createScrollingList(player_id, list_id, x, y, width, height, config)
+function ScrollingSpriteList:createScrollingList(player_id, list_id, x, y, width, height, config, properties)
     dprint("DEBUG: Creating scrolling list " .. list_id .. " for player " .. player_id)
 
     config = config or {}
@@ -115,6 +142,7 @@ function ScrollingSpriteList:createScrollingList(player_id, list_id, x, y, width
     list_config.height = height or 100
     list_config.backdrop = config.backdrop
     list_config.sprites = config.sprites or {}
+    list_config.properties = properties or config.properties
     list_config.entry_states = {}
     list_config.current_state = self.states.waiting
 
@@ -175,7 +203,7 @@ function ScrollingSpriteList:createScrollingList(player_id, list_id, x, y, width
     return list_id
 end
 
--- Pre-allocate all sprites upfront (per-entry index; avoids “dedupe allocated but not drawable” bugs)
+-- Pre-allocate all sprites upfront (per-entry index; avoids ï¿½dedupe allocated but not drawableï¿½ bugs)
 function ScrollingSpriteList:preallocateSprites(player_id, list_id, config)
     for i, sprite_def in ipairs(config.sprites) do
         local sprite_id = list_id .. "_sprite_" .. i
@@ -276,18 +304,17 @@ function ScrollingSpriteList:drawListBackdrop(player_id, list_id, config)
 
     dprint("DEBUG: Drawing backdrop at " .. config.backdrop.x .. "," .. config.backdrop.y)
 
-    Net.player_draw_sprite(
-        player_id,
-        "backdrop",
-        {
-            id = backdrop_id,
-            x = config.backdrop.x,
-            y = config.backdrop.y,
-            z = config.z_order - 1,
-            sx = config.backdrop.width,
-            sy = config.backdrop.height
-        }
-    )
+local props = _merge_props(config.properties, config.backdrop and config.backdrop.properties or nil)
+local draw = _prepare_draw_params({
+    id = backdrop_id,
+    x = config.backdrop.x,
+    y = config.backdrop.y,
+    z = config.z_order - 1,
+    sx = config.backdrop.width,
+    sy = config.backdrop.height
+}, props)
+
+Net.player_draw_sprite(player_id, "backdrop", draw)
 
     return backdrop_id
 end
@@ -315,19 +342,18 @@ function ScrollingSpriteList:drawListEntry(player_id, list_id, entry_index, list
         dprint("DEBUG: Attempting to draw sprite " .. sprite_id .. " at " .. sprite_x .. "," .. sprite_y)
 
         local draw_success, draw_err = pcall(function()
-            Net.player_draw_sprite(
-                player_id,
-                sprite_id,
-                {
-                    id = unique_display_id,
-                    x = sprite_x,
-                    y = sprite_y,
-                    z = config.z_order,
-                    sx = sprite_def.sx or sprite_def.scale or 1,
-                    sy = sprite_def.sy or sprite_def.scale or 1,
-                    anim_state = sprite_def.anim_state or "UI"
-                }
-            )
+local props = _merge_props(config.properties, sprite_def.properties)
+local draw = _prepare_draw_params({
+    id = unique_display_id,
+    x = sprite_x,
+    y = sprite_y,
+    z = config.z_order,
+    sx = sprite_def.sx or sprite_def.scale or 1,
+    sy = sprite_def.sy or sprite_def.scale or 1,
+    anim_state = sprite_def.anim_state or "UI"
+}, props)
+
+Net.player_draw_sprite(player_id, sprite_id, draw)
         end)
 
         if draw_success then
@@ -354,16 +380,18 @@ function ScrollingSpriteList:drawListEntry(player_id, list_id, entry_index, list
 
             dprint("DEBUG: Drawing text: " .. sprite_def.text)
 
-            local text_display_id = self:drawSpriteText(
-                player_id,
-                sprite_def.text,
-                text_x,
-                text_y,
-                sprite_def.text_font or "THICK",
-                sprite_def.text_scale or 2.0,
-                config.z_order + 1,
-                list_id .. "_text_" .. entry_index
-            )
+local text_props = _merge_props(config.properties, sprite_def.text_properties)
+local text_display_id = self:drawSpriteText(
+    player_id,
+    sprite_def.text,
+    text_x,
+    text_y,
+    sprite_def.text_font or "THICK",
+    sprite_def.text_scale or 2.0,
+    config.z_order + 1,
+    list_id .. "_text_" .. entry_index,
+    text_props
+)
 
             if text_display_id then
                 table.insert(entry_state.display_objects, {
@@ -377,21 +405,19 @@ function ScrollingSpriteList:drawListEntry(player_id, list_id, entry_index, list
     end
 end
 
-function ScrollingSpriteList:drawErrorPlaceholder(player_id, display_id, x, y, z_order)
+function ScrollingSpriteList:drawErrorPlaceholder(player_id, display_id, x, y, z_order, properties)
     local success, err = pcall(function()
-        Net.player_draw_sprite(
-            player_id,
-            "backdrop",
-            {
-                id = display_id,
-                x = x,
-                y = y,
-                z = z_order,
-                sx = 16,
-                sy = 16,
-                r = 1.0, g = 0.0, b = 0.0, a = 0.7
-            }
-        )
+local draw = _prepare_draw_params({
+    id = display_id,
+    x = x,
+    y = y,
+    z = z_order,
+    sx = 16,
+    sy = 16,
+    r = 1.0, g = 0.0, b = 0.0, a = 0.7
+}, properties)
+
+Net.player_draw_sprite(player_id, "backdrop", draw)
     end)
 
     if not success then
@@ -401,11 +427,12 @@ function ScrollingSpriteList:drawErrorPlaceholder(player_id, display_id, x, y, z
     end
 end
 
-function ScrollingSpriteList:drawSpriteText(player_id, text, x, y, font, scale, z_order, display_id)
+function ScrollingSpriteList:drawSpriteText(player_id, text, x, y, font, scale, z_order, display_id, properties)
     local font_system_success, font_system = pcall(require, "scripts/net-games/displayer/font-system")
 
     if font_system_success and font_system and font_system.drawText then
-        return font_system:drawText(player_id, display_id, text, x, y, font, scale, z_order)
+        -- Correct arg order: (player_id, text_id, text, x, y, z_order, font_name, scale, properties)
+        return font_system:drawText(player_id, display_id, text, x, y, z_order, font, scale, properties)
     else
         dprint_once("font_system_missing", "DEBUG: Font system not available")
     end
@@ -626,7 +653,7 @@ function ScrollingSpriteList:removeScrollingList(player_id, list_id)
     player_data.active_lists[list_id] = nil
 end
 
-function ScrollingSpriteList:setListPosition(player_id, list_id, x, y)
+function ScrollingSpriteList:setListPosition(player_id, list_id, x, y, properties)
     local player_data = self.player_lists[player_id]
     if not player_data then return false end
 
@@ -634,6 +661,10 @@ function ScrollingSpriteList:setListPosition(player_id, list_id, x, y)
     if not list_data then return false end
 
     local config = list_data.config
+
+    if properties ~= nil then
+        config.properties = properties
+    end
 
     config.x = x
     config.y = y

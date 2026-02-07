@@ -2,42 +2,125 @@
 FontSystem = {}
 FontSystem.__index = FontSystem
 
+-- Add SpriteManager integration at the top
+local SpriteManager_ok, SpriteManager = pcall(require, "scripts/net-games/sprites-api/sprite-manager")
+local SpriteConstants_ok, SpriteConstants = pcall(require, "scripts/net-games/sprites-api/sprite-constants")
+
+if not SpriteManager_ok then
+    print("[FontSystem] WARNING: SpriteManager not available. Font rendering will be limited.")
+    SpriteManager = nil
+end
+
+if not SpriteConstants_ok then
+    print("[FontSystem] WARNING: SpriteConstants not available.")
+    SpriteConstants = nil
+end
+
+-- Optional helper: merge sprite draw properties (rotation/tint/opacity/etc.)
+local prepare_draw_params
+do
+    local ok, mh = pcall(require, "scripts/net-games/math-helpers")
+    if ok and type(mh) == "table" and mh.prepare_draw_params then
+        prepare_draw_params = mh.prepare_draw_params
+    end
+end
+
+local function _props_without_xy(props)
+    if type(props) ~= "table" then return nil end
+    local out = {}
+    local has = false
+    for k, v in pairs(props) do
+        if k ~= "x" and k ~= "y" and k ~= "X" and k ~= "Y" then
+            out[k] = v
+            has = true
+        end
+    end
+    if not has then return nil end
+    return out
+end
+
+local function _merge_draw_params(base, props)
+    if prepare_draw_params then
+        return prepare_draw_params(base, props)
+    end
+    if type(props) == "table" then
+        for k, v in pairs(props) do
+            base[k] = v
+        end
+    end
+    return base
+end
+
+local function _props_sig(props)
+    if type(props) ~= "table" then return "" end
+    local opacity = props.opacity
+    if opacity == nil then opacity = props.a end
+    local ro = props.ro or props.rotation
+    return table.concat({
+        tostring(ro or ""),
+        tostring(props.ox or ""),
+        tostring(props.oy or ""),
+        tostring(props.r or ""),
+        tostring(props.g or ""),
+        tostring(props.b or ""),
+        tostring(opacity or ""),
+        tostring(props.color_mode or "")
+    }, "|")
+end
+
 function FontSystem:init()
-    local COMP_TEX  = "/server/assets/net-games/fonts/fonts_compressed.png"
-    local COMP_ANIM = "/server/assets/net-games/fonts/fonts_compressed.animation"
-    local DARK_TEX  = "/server/assets/net-games/fonts/fonts_dark_compressed.png"
-    local DARK_ANIM = "/server/assets/net-games/fonts/fonts_dark_compressed.animation"
-
-    self.font_sprites = {
-        -- Light
-        THICK = { texture_path = COMP_TEX, anim_path = COMP_ANIM, anim_state = "THICK_0" },
-        THIN  = { texture_path = COMP_TEX, anim_path = COMP_ANIM, anim_state = "THIN_0" },
-        WIDE  = { texture_path = COMP_TEX, anim_path = COMP_ANIM, anim_state = "WIDE_0" },
-        TINY  = { texture_path = COMP_TEX, anim_path = COMP_ANIM, anim_state = "TINY_0" },
-        BATTLE= { texture_path = COMP_TEX, anim_path = COMP_ANIM, anim_state = "BATTLE_0" },
-
-        GRADIENT        = { texture_path = COMP_TEX, anim_path = COMP_ANIM, anim_state = "GRADIENT_0" },
-        GRADIENT_GOLD   = { texture_path = COMP_TEX, anim_path = COMP_ANIM, anim_state = "GRADIENT_GOLD_0" },
-        GRADIENT_ORANGE = { texture_path = COMP_TEX, anim_path = COMP_ANIM, anim_state = "GRADIENT_ORANGE_0" },
-        GRADIENT_GREEN  = { texture_path = COMP_TEX, anim_path = COMP_ANIM, anim_state = "GRADIENT_GREEN_0" },
-        GRADIENT_TALL   = { texture_path = COMP_TEX, anim_path = COMP_ANIM, anim_state = "GRADIENT_TALL_0" },
-
-        -- Dark
-        THICK_BLACK = { texture_path = DARK_TEX, anim_path = DARK_ANIM, anim_state = "THICK_0" },
-        THIN_BLACK  = { texture_path = DARK_TEX, anim_path = DARK_ANIM, anim_state = "THIN_0" },
-        WIDE_BLACK  = { texture_path = DARK_TEX, anim_path = DARK_ANIM, anim_state = "WIDE_0" },
-        TINY_BLACK  = { texture_path = DARK_TEX, anim_path = DARK_ANIM, anim_state = "TINY_0" },
-        BATTLE_BLACK= { texture_path = DARK_TEX, anim_path = DARK_ANIM, anim_state = "BATTLE_0" },
-
-        GRADIENT_BLACK        = { texture_path = DARK_TEX, anim_path = DARK_ANIM, anim_state = "GRADIENT_0" },
-        GRADIENT_GOLD_BLACK   = { texture_path = DARK_TEX, anim_path = DARK_ANIM, anim_state = "GRADIENT_GOLD_0" },
-        GRADIENT_ORANGE_BLACK = { texture_path = DARK_TEX, anim_path = DARK_ANIM, anim_state = "GRADIENT_ORANGE_0" },
-        GRADIENT_GREEN_BLACK  = { texture_path = DARK_TEX, anim_path = DARK_ANIM, anim_state = "GRADIENT_GREEN_0" },
-        GRADIENT_TALL_BLACK   = { texture_path = DARK_TEX, anim_path = DARK_ANIM, anim_state = "GRADIENT_TALL_0" },
-    }
-
+    -- Font sprite definitions now use SpriteConstants
+    self.font_sprites = {}
     
-    -- Character width data for consistent spacing - FIXED: Now includes all common characters
+    -- Only proceed if SpriteConstants is available
+    if SpriteConstants then
+        for font_name, _ in pairs(SpriteConstants.FONTS) do
+            local sprite_id = SpriteConstants:get_font_sprite_id(font_name)
+            self.font_sprites[font_name] = {
+                sprite_id = sprite_id,
+                texture_path = "/server/assets/net-games/fonts/fonts_compressed.png",
+                anim_path = "/server/assets/net-games/fonts/fonts_compressed.animation",
+                anim_state = font_name .. "_0"
+            }
+            
+            -- Handle dark variants
+            if not font_name:match("_BLACK$") then
+                local black_name = font_name .. "_BLACK"
+                local black_sprite_id = SpriteConstants:get_font_sprite_id(black_name)
+                self.font_sprites[black_name] = {
+                    sprite_id = black_sprite_id,
+                    texture_path = "/server/assets/net-games/fonts/fonts_dark_compressed.png",
+                    anim_path = "/server/assets/net-games/fonts/fonts_dark_compressed.animation",
+                    anim_state = font_name .. "_0"  -- Same animation state names
+                }
+            end
+        end
+    else
+        -- Fallback font definitions if SpriteConstants not available
+        local fallback_fonts = {
+            "THICK", "BATTLE", "THIN", "TINY", "WIDE", "GRADIENT", 
+            "GRADIENT_GOLD", "GRADIENT_TALL", "GRADIENT_GREEN", "GRADIENT_ORANGE"
+        }
+        
+        for _, font_name in ipairs(fallback_fonts) do
+            self.font_sprites[font_name] = {
+                sprite_id = "font_" .. font_name,
+                texture_path = "/server/assets/net-games/fonts/fonts_compressed.png",
+                anim_path = "/server/assets/net-games/fonts/fonts_compressed.animation",
+                anim_state = font_name .. "_0"
+            }
+            
+            local black_name = font_name .. "_BLACK"
+            self.font_sprites[black_name] = {
+                sprite_id = "font_" .. black_name,
+                texture_path = "/server/assets/net-games/fonts/fonts_dark_compressed.png",
+                anim_path = "/server/assets/net-games/fonts/fonts_dark_compressed.animation",
+                anim_state = font_name .. "_0"
+            }
+        end
+    end
+    
+    -- Character width data (unchanged from original)
     self.char_widths = {
         THICK = {
             ["0"] = 6, ["1"] = 6, ["2"] = 6, ["3"] = 6, ["4"] = 6, ["5"] = 6,
@@ -229,7 +312,7 @@ function FontSystem:init()
             [";"] = 6
         }
     }
-
+    
     --=====================================================
     -- Alias *_BLACK width tables to their non-black equivalents
     -- This keeps glyph support checks (lowercase, punctuation, etc.)
@@ -247,7 +330,6 @@ function FontSystem:init()
             alias_widths(font_name)
         end
     end
-
     
     self.player_fonts = {}
     
@@ -268,28 +350,43 @@ function FontSystem:setupPlayerFonts(player_id)
         next_obj_id = 10000  -- Start with high ID to avoid conflicts
     }
     
-    -- Provide assets and allocate sprites for each font type
-    for font_name, sprite_data in pairs(self.font_sprites) do
-        Net.provide_asset_for_player(player_id, sprite_data.texture_path)
-        if sprite_data.anim_path then
-            Net.provide_asset_for_player(player_id, sprite_data.anim_path)
-        end
+    -- Only initialize sprite manager if available
+    if SpriteManager then
+        -- Initialize sprite manager for this player
+        SpriteManager.init_player(player_id)
         
-        Net.player_alloc_sprite(player_id, font_name, sprite_data)
+        -- Get sprite manager for this player
+        local sprite_manager = SpriteManager.get_player_manager(player_id)
+        
+        -- Allocate sprites for each font type
+        for font_name, sprite_data in pairs(self.font_sprites) do
+            sprite_manager:strict_alloc_sprite(sprite_data.sprite_id, {
+                texture_path = sprite_data.texture_path,
+                anim_path = sprite_data.anim_path,
+                anim_state = sprite_data.anim_state
+            })
+        end
     end
 end
 
 function FontSystem:cleanupPlayerFonts(player_id)
     local player_data = self.player_fonts[player_id]
     if player_data then
-        -- Erase all active displays
+        -- Erase all active displays using sprite manager
         for display_id, display in pairs(player_data.active_displays) do
             self:eraseTextDisplay(player_id, display_id)
         end
         
-        -- Deallocate all font sprites
-        for font_name, _ in pairs(self.font_sprites) do
-            Net.player_dealloc_sprite(player_id, font_name)
+        -- Only deallocate if SpriteManager is available
+        if SpriteManager then
+            -- Deallocate all font sprites using sprite manager
+            local sprite_manager = SpriteManager.get_player_manager(player_id)
+            for font_name, sprite_data in pairs(self.font_sprites) do
+                sprite_manager:dealloc_sprite(sprite_data.sprite_id)
+            end
+            
+            -- Clean up sprite manager for this player
+            SpriteManager.cleanup_player(player_id)
         end
         
         self.player_fonts[player_id] = nil
@@ -298,7 +395,6 @@ end
 
 -- Returns the animation prefix for a font.
 -- Dark fonts reuse the SAME animation state names as their base font.
--- Example: THICK_BLACK uses THICK_* states (but draws with THICK_BLACK texture).
 local function anim_prefix_for_font(font_name)
     -- strip ONLY a trailing "_BLACK"
     return (font_name and font_name:gsub("_BLACK$", "")) or font_name
@@ -321,9 +417,7 @@ local function normalize_glyph(raw)
     return raw
 end
 
-
 -- Normalize punctuation into ASCII BEFORE we iterate by bytes.
--- Handles both UTF-8 punctuation and CP1252 "smart" punctuation bytes (common on Windows).
 local function normalize_text(text)
     if not text or text == "" then return text end
 
@@ -338,7 +432,6 @@ local function normalize_text(text)
     text = text:gsub("�", "...")
 
     -- CP1252 smart punctuation bytes (Windows-1252)
-    -- 0x91 �  0x92 �  0x93 �  0x94 �  0x96 �  0x97 �  0x85 �
     local b = string.char
     text = text:gsub(b(0x91), "'"):gsub(b(0x92), "'")
     text = text:gsub(b(0x93), '"'):gsub(b(0x94), '"')
@@ -348,7 +441,7 @@ local function normalize_text(text)
     return text
 end
 
-local DEBUG_UNKNOWN_GLYPHS = true
+local DEBUG_UNKNOWN_GLYPHS = false  -- Set to false by default to reduce noise
 
 local function dbg_unknown(font_name, raw_byte, state, text, i)
     if not DEBUG_UNKNOWN_GLYPHS then return end
@@ -356,8 +449,6 @@ local function dbg_unknown(font_name, raw_byte, state, text, i)
     print(string.format("[FontSystem] unknown glyph: font=%s i=%d byte=0x%02X state=%s context=%q",
         tostring(font_name), i, byte, tostring(state), tostring(text)))
 end
-
-
 
 -- Table with each letter of the alphabet as separate strings
 local alphabet = {
@@ -368,7 +459,7 @@ local alphabet = {
 }
 
 -- Function to check if a string is in the alphabet table
-function isInAlphabet(str)
+local function isInAlphabet(str)
     for _, letter in ipairs(alphabet) do
         if letter == str then
             return true
@@ -377,11 +468,21 @@ function isInAlphabet(str)
     return false
 end
 
-function FontSystem:drawTextWithId(player_id, text, x, y, font_name, scale, z_order, display_id, tint)
+function FontSystem:drawTextWithId(player_id, text, x, y, font_name, scale, z_order, display_id, properties)
     font_name = font_name or "THICK"
     scale = scale or 2.0
     z_order = z_order or 100
     text = normalize_text(text)
+
+    local anchor_x, anchor_y = x, y
+    if type(properties) == "table" then
+        if properties.x ~= nil then anchor_x = properties.x end
+        if properties.X ~= nil then anchor_x = properties.X end
+        if properties.y ~= nil then anchor_y = properties.y end
+        if properties.Y ~= nil then anchor_y = properties.Y end
+    end
+
+    local glyph_props = _props_without_xy(properties)
 
     local player_data = self.player_fonts[player_id]
     if not player_data then return nil end
@@ -392,18 +493,11 @@ function FontSystem:drawTextWithId(player_id, text, x, y, font_name, scale, z_or
     local base_spacing = 1
     local scaled_spacing = base_spacing * scale
 
-    -- Normalize tint values once (fonts should use opacity, not `a`)
-    local tint_r, tint_g, tint_b, tint_opacity, tint_color_mode
-    if type(tint) == "table" then
-        tint_r = tint.r
-        tint_g = tint.g
-        tint_b = tint.b
-        tint_opacity = tint.opacity or tint.a -- accept old callers, but we will APPLY via opacity only
-        tint_color_mode = tint.color_mode
-    end
+    local glyph_props = _props_without_xy(properties)
+    local props_sig = _props_sig(glyph_props)
 
     local function build_and_draw(start_x, start_y)
-        local current_x = start_x
+        local current_x = start_x or 0
         local obj_i = 0
 
         -- ensure table exists
@@ -415,89 +509,77 @@ function FontSystem:drawTextWithId(player_id, text, x, y, font_name, scale, z_or
                 z_order = z_order,
                 character_objects = {},
                 text = "",
-                tint_r = tint_r,
-                tint_g = tint_g,
-                tint_b = tint_b,
-                tint_opacity = tint_opacity,
-                tint_color_mode = tint_color_mode
+                props_sig = props_sig
             }
             player_data.active_displays[display_id] = existing
         end
 
-
         local prefix = anim_prefix_for_font(font_name)
+        
+        -- Only use SpriteManager if available
+        if SpriteManager then
+            local sprite_manager = SpriteManager.get_player_manager(player_id)
+            local sprite_id = SpriteConstants and SpriteConstants:get_font_sprite_id(font_name) or "font_" .. font_name
 
-        -- Draw/update glyph sprites in place using stable obj ids
-        for i = 1, #text do
-            local raw = text:sub(i, i)
-            local char = normalize_glyph(raw) or raw
+            -- Draw/update glyph sprites in place using stable obj ids
+            for i = 1, #text do
+                local raw = text:sub(i, i)
+                local char = normalize_glyph(raw) or raw
 
-            if (font_name == "BATTLE" or font_name == "WIDE") and char:match("%a") then
-                char = char:upper()
-            end
-
-            local char_width = char_widths[char] or char_widths["A"] or 6
-            local scaled_width = char_width * scale
-
-            -- Space: advance only (no sprite)
-            if char == " " then
-                current_x = current_x + scaled_width + scaled_spacing
-            else
-                obj_i = obj_i + 1
-                local obj_id = display_id .. "_char_" .. (10000 + obj_i)
-
-                local state
-                if char == char:lower() and isInAlphabet(char) then
-                    state = prefix .. "_LOWER_" .. char:upper()
-                else
-                    state = prefix .. "_" .. char
+                if (font_name == "BATTLE" or font_name == "WIDE") and char:match("%a") then
+                    char = char:upper()
                 end
 
-                local spr_opts = {
-                    id = obj_id,
-                    x = current_x,
-                    y = start_y,
-                    z = z_order,
-                    sx = scale,
-                    sy = scale,
-                    anim_state = state,
+                local char_width = char_widths[char] or char_widths["A"] or 6
+                local scaled_width = char_width * scale
 
-                    -- IMPORTANT: always reset sprite opacity so "dim" doesn't stick
-                    opacity = 255
-                }
+                -- Space: advance only (no sprite)
+                if char == " " then
+                    current_x = current_x + scaled_width + scaled_spacing
+                else
+                    obj_i = obj_i + 1
+                    local obj_id = display_id .. "_char_" .. (10000 + obj_i)
 
+                    local state
+                    if char == char:lower() and isInAlphabet(char) then
+                        state = prefix .. "_LOWER_" .. char:upper()
+                    else
+                        state = prefix .. "_" .. char
+                    end
 
--- Optional tint (used for dimming menu items, etc.)
-if type(tint) == "table" then
-    if tint.r then spr_opts.r = tint.r end
-    if tint.g then spr_opts.g = tint.g end
-    if tint.b then spr_opts.b = tint.b end
-    if tint.a then spr_opts.a = tint.a end
-    if tint.color_mode then spr_opts.color_mode = tint.color_mode end
+                    local spr_opts = {
+                        id = obj_id,
+                        x = current_x,
+                        y = start_y,
+                        z = z_order,
+                        sx = scale,
+                        sy = scale,
+                        anim_state = state,
+                        ro = properties.ro,
+                        -- IMPORTANT: always reset sprite opacity so "dim" doesn't stick
+                        opacity = 255
+                    }
 
-    -- IMPORTANT: accept "opacity" from callers (PromptVertical uses tint.opacity)
-    -- Use ~= nil so opacity=0 still works.
-    if tint.opacity ~= nil then
-        spr_opts.opacity = tint.opacity
-    end
-end
+                    _merge_draw_params(spr_opts, glyph_props)
+                    -- Use SpriteManager to draw the sprite
+                    sprite_manager:draw_sprite(sprite_id, obj_id, spr_opts)
 
-
-                Net.player_draw_sprite(player_id, font_name, spr_opts)
-
-
-                existing.character_objects[obj_i] = { obj_id = obj_id, width = scaled_width }
-                current_x = current_x + scaled_width + scaled_spacing
+                    existing.character_objects[obj_i] = { obj_id = obj_id, width = scaled_width }
+                    current_x = current_x + scaled_width + scaled_spacing
+                end
             end
-        end
 
-        -- Erase any leftover glyph sprites from the previous longer string
-        for j = obj_i + 1, #existing.character_objects do
-            local tail = existing.character_objects[j]
-            if tail and tail.obj_id then
-                Net.player_erase_sprite(player_id, tail.obj_id)
+            -- Erase any leftover glyph sprites from the previous longer string
+            for j = obj_i + 1, #existing.character_objects do
+                local tail = existing.character_objects[j]
+                if tail and tail.obj_id then
+                    sprite_manager:erase_sprite(tail.obj_id)
+                end
+                existing.character_objects[j] = nil
             end
-            existing.character_objects[j] = nil
+        else
+            -- Fallback: simple text rendering without sprites
+            print("[FontSystem] WARNING: SpriteManager not available, text rendering limited")
         end
 
         existing.font = font_name
@@ -506,47 +588,34 @@ end
         existing.scale = scale
         existing.z_order = z_order
         existing.text = text
-
-        existing.tint_r = tint_r
-        existing.tint_g = tint_g
-        existing.tint_b = tint_b
-        existing.tint_opacity = tint_opacity
-        existing.tint_color_mode = tint_color_mode
-
+        existing.props_sig = props_sig
 
         return display_id
     end
 
-    -- If same text/style and same position (and same tint): no-op
+    -- If same text/style and same position (and same properties): no-op
     if existing
         and existing.text == text
         and existing.font == font_name
         and existing.scale == scale
         and existing.z_order == z_order
-        and existing.x == x
-        and existing.y == y
-        and existing.tint_r == tint_r
-        and existing.tint_g == tint_g
-        and existing.tint_b == tint_b
-        and existing.tint_opacity == tint_opacity
-        and existing.tint_color_mode == tint_color_mode
+        and existing.x == anchor_x
+        and existing.y == anchor_y
+        and existing.props_sig == props_sig
     then
         return display_id
     end
 
-
     -- If same text/style but moved: just redraw positions (still no erase)
     -- If text/style changed: update in place + trim tail
-    return build_and_draw(x, y)
+    return build_and_draw(anchor_x, anchor_y)
 end
 
-
-function FontSystem:drawText(player_id, text_id, text, x, y, z_order, font_name, scale)
+function FontSystem:drawText(player_id, text_id, text, x, y, z_order, font_name, scale, properties)
     font_name = font_name or "THICK"
     scale = tonumber(scale) or 2.0
     z_order = z_order or 100
     text = normalize_text(text)
-
 
     local player_data = self.player_fonts[player_id]
     if not player_data then return nil end
@@ -568,65 +637,77 @@ function FontSystem:drawText(player_id, text_id, text, x, y, z_order, font_name,
     local base_spacing = 1
     local scaled_spacing = base_spacing * scale
 
-    for i = 1, #text do
-        local raw = text:sub(i, i)
-        local char = normalize_glyph(raw) or raw
+    -- Only use SpriteManager if available
+    if SpriteManager then
+        local sprite_manager = SpriteManager.get_player_manager(player_id)
+        local sprite_id = SpriteConstants and SpriteConstants:get_font_sprite_id(font_name) or "font_" .. font_name
 
-        if (font_name == "BATTLE" or font_name == "WIDE") and char:match("%a") then
-            char = char:upper()
-        end
+        for i = 1, #text do
+            local raw = text:sub(i, i)
+            local char = normalize_glyph(raw) or raw
 
-        local char_width = char_widths[char] or char_widths["A"] or 6
-        local scaled_width = char_width * scale
+            if (font_name == "BATTLE" or font_name == "WIDE") and char:match("%a") then
+                char = char:upper()
+            end
 
-        local obj_id = display_id .. "_char_" .. (10000 + i)
+            local char_width = char_widths[char] or char_widths["A"] or 6
+            local scaled_width = char_width * scale
 
-        local prefix = anim_prefix_for_font(font_name)
-        local state
-        if char == char:lower() and isInAlphabet(char) then
-            state = prefix .. "_LOWER_" .. char:upper()
-        else
-            state = prefix .. "_" .. char
-        end
+            local obj_id = display_id .. "_char_" .. (10000 + i)
 
-        -- DEBUG: log any glyph that is not in the width table
-        if char ~= " " and not char_widths[char] then
-            dbg_unknown(font_name, raw, state, text, i)
-        end
+            local prefix = anim_prefix_for_font(font_name)
+            local state
+            if char == char:lower() and isInAlphabet(char) then
+                state = prefix .. "_LOWER_" .. char:upper()
+            else
+                state = prefix .. "_" .. char
+            end
 
+            -- DEBUG: log any glyph that is not in the width table
+            if char ~= " " and not char_widths[char] then
+                dbg_unknown(font_name, raw, state, text, i)
+            end
 
-        -- Space: advance only (no sprite)
-        if char == " " then
+            -- Space: advance only (no sprite)
+            if char == " " then
+                current_x = current_x + scaled_width + scaled_spacing
+                goto continue
+            end
+
+            local spr_opts = {
+                id = obj_id,
+                x = current_x, y = y, z = z_order,
+                sx = scale, sy = scale,
+                anim_state = state,
+                opacity = 255
+            }
+            _merge_draw_params(spr_opts, properties)
+            -- Use SpriteManager to draw the sprite
+            sprite_manager:draw_sprite(sprite_id, obj_id, spr_opts)
+
+            table.insert(display_data.character_objects, { obj_id = obj_id, width = scaled_width })
             current_x = current_x + scaled_width + scaled_spacing
-            goto continue
+
+            ::continue::
         end
-
-        Net.player_draw_sprite(player_id, font_name, {
-            id = obj_id,
-            x = current_x, y = y, z = z_order,
-            sx = scale, sy = scale,
-            anim_state = state
-        })
-
-        table.insert(display_data.character_objects, { obj_id = obj_id, width = scaled_width })
-        current_x = current_x + scaled_width + scaled_spacing
-
-        ::continue::
+    else
+        print("[FontSystem] WARNING: SpriteManager not available, text rendering limited")
     end
-
 
     player_data.active_displays[display_id] = display_data
     return display_id
 end
-
 
 function FontSystem:eraseTextDisplay(player_id, display_id)
     local player_data = self.player_fonts[player_id]
     if player_data then
         local display = player_data.active_displays[display_id]
         if display then
-            for _, char_data in ipairs(display.character_objects) do
-                Net.player_erase_sprite(player_id, char_data.obj_id)
+            if SpriteManager then
+                local sprite_manager = SpriteManager.get_player_manager(player_id)
+                for _, char_data in ipairs(display.character_objects) do
+                    sprite_manager:erase_sprite(char_data.obj_id)
+                end
             end
             player_data.active_displays[display_id] = nil
         end
@@ -638,7 +719,6 @@ function FontSystem:getTextWidth(text, font_name, scale)
     scale = scale or 2.0
     text = normalize_text(text)
 
-    
     local char_widths = self.char_widths[font_name] or self.char_widths.THICK
     local total_width = 0
     

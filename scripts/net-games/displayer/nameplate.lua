@@ -5,6 +5,26 @@
 local Nameplate = {}
 Nameplate.__index = Nameplate
 
+-- Optional: merge rotation/tint/opacity/etc into sprite draw params
+local prepare_draw_params = nil
+pcall(function()
+  local mh = require("scripts/net-games/math-helpers")
+  if mh and mh.prepare_draw_params then
+    prepare_draw_params = mh.prepare_draw_params
+  end
+end)
+
+local function _props_without_xy(props)
+  if type(props) ~= "table" then return nil end
+  local out = {}
+  for k, v in pairs(props) do
+    if k ~= "x" and k ~= "y" and k ~= "X" and k ~= "Y" then
+      out[k] = v
+    end
+  end
+  return out
+end
+
 local function ceil_div(a, b)
   return math.floor((a + b - 1) / b)
 end
@@ -231,6 +251,16 @@ function Nameplate:attach(player_id, player_data, box_id, box_data, cfg)
     if cfg.y ~= nil then y = cfg.y end
   end
 
+
+  -- Optional properties table (rotation/tint/opacity/etc). Also allow x/y override here.
+  local properties = (type(cfg) == "table") and cfg.properties or nil
+  if type(properties) == "table" then
+    if properties.x ~= nil then x = properties.x end
+    if properties.y ~= nil then y = properties.y end
+    if properties.X ~= nil then x = properties.X end
+    if properties.Y ~= nil then y = properties.Y end
+  end
+
   local center_x = x + (total_w / 2)
   local idp = tostring(box_id) .. "_np"
 
@@ -274,6 +304,9 @@ function Nameplate:attach(player_id, player_data, box_id, box_data, cfg)
 
     -- overlay tint
     frame = frame_tint,
+
+    -- optional draw properties (rotation/tint/opacity/etc)
+    properties = properties,
 
     -- bob animation
     bob_t = 0,
@@ -422,23 +455,46 @@ function Nameplate:update(player_id, player_data, box_data, dt)
     end
   end
 
+  -- Apply optional draw properties (do NOT allow x/y to collapse slices)
+  local props = _props_without_xy(np.properties)
+
   -- LEFT (base, then frame)
-  Net.player_draw_sprite(player_id, self.SID_LEFT, {
+  do
+  local opts = {
     id = np.idp .. "_L",
     x = left_x, y = y, z = z,
     sx = scale, sy = scale,
     r = 255, g = 255, b = 255, a = 255,
     color_mode = 0,
-  })
+  }
+  if type(props) == "table" then
+    if prepare_draw_params then
+      opts = prepare_draw_params(opts, props) or opts
+    else
+      for k, v in pairs(props) do opts[k] = v end
+    end
+  end
+  Net.player_draw_sprite(player_id, self.SID_LEFT, opts)
+end
 
   if draw_frame then
-    Net.player_draw_sprite(player_id, self.SID_LEFT_F, {
-      id = np.idp .. "_FL",
-      x = left_x, y = y, z = fz,
-      sx = scale, sy = scale,
-      r = fr, g = fg, b = fb, a = fa,
-      color_mode = fmode,
-    })
+    do
+  local opts = {
+    id = np.idp .. "_FL",
+    x = left_x, y = y, z = fz,
+    sx = scale, sy = scale,
+    r = fr, g = fg, b = fb, a = fa,
+    color_mode = fmode,
+  }
+  if type(props) == "table" then
+    if prepare_draw_params then
+      opts = prepare_draw_params(opts, props) or opts
+    else
+      for k, v in pairs(props) do opts[k] = v end
+    end
+  end
+  Net.player_draw_sprite(player_id, self.SID_LEFT_F, opts)
+end
   else
     Net.player_erase_sprite(player_id, np.idp .. "_FL")
   end
@@ -447,22 +503,42 @@ function Nameplate:update(player_id, player_data, box_data, dt)
   for i = 0, mids - 1 do
     local px = mx + (i * np.mid_w)
 
-    Net.player_draw_sprite(player_id, self.SID_MID0 .. i, {
-      id = np.idp .. "_M" .. i,
-      x = px, y = y, z = z,
-      sx = scale, sy = scale,
-      r = 255, g = 255, b = 255, a = 255,
-      color_mode = 0,
-    })
+    do
+  local opts = {
+    id = np.idp .. "_M" .. i,
+    x = px, y = y, z = z,
+    sx = scale, sy = scale,
+    r = 255, g = 255, b = 255, a = 255,
+    color_mode = 0,
+  }
+  if type(props) == "table" then
+    if prepare_draw_params then
+      opts = prepare_draw_params(opts, props) or opts
+    else
+      for k, v in pairs(props) do opts[k] = v end
+    end
+  end
+  Net.player_draw_sprite(player_id, self.SID_MID0 .. i, opts)
+end
 
     if draw_frame then
-      Net.player_draw_sprite(player_id, self.SID_MID0_F .. i, {
-        id = np.idp .. "_FM" .. i,
-        x = px, y = y, z = fz,
-        sx = scale, sy = scale,
-        r = fr, g = fg, b = fb, a = fa,
-        color_mode = fmode,
-      })
+      do
+  local opts = {
+    id = np.idp .. "_FM" .. i,
+    x = px, y = y, z = fz,
+    sx = scale, sy = scale,
+    r = fr, g = fg, b = fb, a = fa,
+    color_mode = fmode,
+  }
+  if type(props) == "table" then
+    if prepare_draw_params then
+      opts = prepare_draw_params(opts, props) or opts
+    else
+      for k, v in pairs(props) do opts[k] = v end
+    end
+  end
+  Net.player_draw_sprite(player_id, self.SID_MID0_F .. i, opts)
+end
     else
       Net.player_erase_sprite(player_id, np.idp .. "_FM" .. i)
     end
@@ -477,22 +553,42 @@ function Nameplate:update(player_id, player_data, box_data, dt)
   -- RIGHT (base, then frame)
   local rx = mx + (mids * np.mid_w)
 
-  Net.player_draw_sprite(player_id, self.SID_RIGHT, {
+  do
+  local opts = {
     id = np.idp .. "_R",
     x = rx, y = y, z = z,
     sx = scale, sy = scale,
     r = 255, g = 255, b = 255, a = 255,
     color_mode = 0,
-  })
+  }
+  if type(props) == "table" then
+    if prepare_draw_params then
+      opts = prepare_draw_params(opts, props) or opts
+    else
+      for k, v in pairs(props) do opts[k] = v end
+    end
+  end
+  Net.player_draw_sprite(player_id, self.SID_RIGHT, opts)
+end
 
   if draw_frame then
-    Net.player_draw_sprite(player_id, self.SID_RIGHT_F, {
-      id = np.idp .. "_FR",
-      x = rx, y = y, z = fz,
-      sx = scale, sy = scale,
-      r = fr, g = fg, b = fb, a = fa,
-      color_mode = fmode,
-    })
+    do
+  local opts = {
+    id = np.idp .. "_FR",
+    x = rx, y = y, z = fz,
+    sx = scale, sy = scale,
+    r = fr, g = fg, b = fb, a = fa,
+    color_mode = fmode,
+  }
+  if type(props) == "table" then
+    if prepare_draw_params then
+      opts = prepare_draw_params(opts, props) or opts
+    else
+      for k, v in pairs(props) do opts[k] = v end
+    end
+  end
+  Net.player_draw_sprite(player_id, self.SID_RIGHT_F, opts)
+end
   else
     Net.player_erase_sprite(player_id, np.idp .. "_FR")
   end
@@ -513,7 +609,8 @@ function Nameplate:update(player_id, player_data, box_data, dt)
       np.font,
       np.text_scale,
       z + 2,
-      np.text_display_id
+      np.text_display_id,
+      _props_without_xy(np.properties)
     )
   end
 end

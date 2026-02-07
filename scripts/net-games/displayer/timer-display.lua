@@ -5,7 +5,9 @@ TimerDisplay.__index = TimerDisplay
 function TimerDisplay:init()
     self.player_displays = {}
     self.global_displays = {}
-    self.font_system = require("scripts/net-games/displayer/font-system")
+    
+    -- Don't require font-system here, let Displayer handle it
+    self.font_system = nil
     
     -- Use very high base IDs for timer displays to avoid conflicts
     self.timer_sprite_base_id = 10000
@@ -73,7 +75,7 @@ function TimerDisplay:setupTimerEventHandlers()
         self:removeGlobalDisplay(event.countdown_id)
     end)
     
-    -- Player-specific timer events - FIXED: Extract player_id from event data
+    -- Player-specific timer events
     Net:on("timer_update", function(event)
         if event.player_id then
             self:updatePlayerTimerDisplay(event.player_id, event.timer_id, event.current)
@@ -137,7 +139,7 @@ function TimerDisplay:cleanupPlayerDisplays(player_id)
     end
 end
 
-function TimerDisplay:createPlayerTimerDisplay(player_id, timer_id, x, y, config_name)
+function TimerDisplay:createPlayerTimerDisplay(player_id, timer_id, x, y, config_name, properties)
     local config = self.display_configs[config_name] or self.display_configs.default
     local display_data = {
         type = "timer",
@@ -148,7 +150,8 @@ function TimerDisplay:createPlayerTimerDisplay(player_id, timer_id, x, y, config
         scale = config.scale,
         z_order = config.z_order,
         display_id = nil,
-        current_value = 0
+        current_value = 0,
+        properties = properties
     }
     
     self.player_displays[player_id].active_displays[timer_id] = display_data
@@ -156,7 +159,7 @@ function TimerDisplay:createPlayerTimerDisplay(player_id, timer_id, x, y, config
     return timer_id
 end
 
-function TimerDisplay:createPlayerCountdownDisplay(player_id, countdown_id, x, y, config_name)
+function TimerDisplay:createPlayerCountdownDisplay(player_id, countdown_id, x, y, config_name, properties)
     local config = self.display_configs[config_name] or self.display_configs.default
     local display_data = {
         type = "countdown", 
@@ -167,7 +170,8 @@ function TimerDisplay:createPlayerCountdownDisplay(player_id, countdown_id, x, y
         scale = config.scale,
         z_order = config.z_order,
         display_id = nil,
-        current_value = 0
+        current_value = 0,
+        properties = properties
     }
     
     self.player_displays[player_id].active_displays[countdown_id] = display_data
@@ -175,7 +179,7 @@ function TimerDisplay:createPlayerCountdownDisplay(player_id, countdown_id, x, y
     return countdown_id
 end
 
-function TimerDisplay:createGlobalTimerDisplay(timer_id, x, y, config_name)
+function TimerDisplay:createGlobalTimerDisplay(timer_id, x, y, config_name, properties)
     local config = self.display_configs[config_name] or self.display_configs.default
     self.global_displays[timer_id] = {
         type = "timer",
@@ -184,7 +188,8 @@ function TimerDisplay:createGlobalTimerDisplay(timer_id, x, y, config_name)
         y = y,
         font = config.font,
         scale = config.scale,
-        z_order = config.z_order
+        z_order = config.z_order,
+        properties = properties
     }
     
     for player_id, _ in pairs(self.player_displays) do
@@ -193,7 +198,7 @@ function TimerDisplay:createGlobalTimerDisplay(timer_id, x, y, config_name)
     return timer_id
 end
 
-function TimerDisplay:createGlobalCountdownDisplay(countdown_id, x, y, config_name)
+function TimerDisplay:createGlobalCountdownDisplay(countdown_id, x, y, config_name, properties)
     local config = self.display_configs[config_name] or self.display_configs.default
     self.global_displays[countdown_id] = {
         type = "countdown",
@@ -202,7 +207,8 @@ function TimerDisplay:createGlobalCountdownDisplay(countdown_id, x, y, config_na
         y = y,
         font = config.font,
         scale = config.scale,
-        z_order = config.z_order
+        z_order = config.z_order,
+        properties = properties
     }
     
     for player_id, _ in pairs(self.player_displays) do
@@ -223,7 +229,8 @@ function TimerDisplay:setupGlobalDisplayForPlayer(player_id, display_id)
             scale = global_display.scale,
             z_order = global_display.z_order,
             display_id = nil,
-            current_value = 0
+            current_value = 0,
+            properties = global_display.properties
         }
         
         self.player_displays[player_id].active_displays[display_id] = display_data
@@ -239,27 +246,39 @@ function TimerDisplay:handleGlobalCountdownCreate(event)
     self:createGlobalCountdownDisplay(event.countdown_id, 100, 80, "default")
 end
 
-function TimerDisplay:updatePlayerTimerDisplay(player_id, timer_id, value)
+function TimerDisplay:updatePlayerTimerDisplay(player_id, timer_id, value, properties)
     local player_data = self.player_displays[player_id]
     if player_data then
         local display = player_data.active_displays[timer_id]
         if display and display.type == "timer" then
+            if type(properties) == "table" then
+                display.properties = display.properties or {}
+                for k, v in pairs(properties) do
+                    display.properties[k] = v
+                end
+            end
             self:updateDisplay(player_id, display, value)
         end
     end
 end
 
-function TimerDisplay:updatePlayerCountdownDisplay(player_id, countdown_id, value)
+function TimerDisplay:updatePlayerCountdownDisplay(player_id, countdown_id, value, properties)
     local player_data = self.player_displays[player_id]
     if player_data then
         local display = player_data.active_displays[countdown_id]
         if display and display.type == "countdown" then
+            if type(properties) == "table" then
+                display.properties = display.properties or {}
+                for k, v in pairs(properties) do
+                    display.properties[k] = v
+                end
+            end
             self:updateDisplay(player_id, display, value)
         end
     end
 end
 
-function TimerDisplay:updateGlobalTimerDisplay(timer_id, value)
+function TimerDisplay:updateGlobalTimerDisplay(timer_id, value, properties)
     for player_id, player_data in pairs(self.player_displays) do
         local display = player_data.active_displays[timer_id]
         if display and display.type == "timer" then
@@ -268,7 +287,7 @@ function TimerDisplay:updateGlobalTimerDisplay(timer_id, value)
     end
 end
 
-function TimerDisplay:updateGlobalCountdownDisplay(countdown_id, value)
+function TimerDisplay:updateGlobalCountdownDisplay(countdown_id, value, properties)
     for player_id, player_data in pairs(self.player_displays) do
         local display = player_data.active_displays[countdown_id]
         if display and display.type == "countdown" then
@@ -278,6 +297,17 @@ function TimerDisplay:updateGlobalCountdownDisplay(countdown_id, value)
 end
 
 function TimerDisplay:updateDisplay(player_id, display, value)
+    -- Lazy load font system if needed
+    if not self.font_system then
+        local ok, fs = pcall(require, "scripts/net-games/displayer/font-system")
+        if ok and fs then
+            self.font_system = fs
+        else
+            print("[TimerDisplay] WARNING: FontSystem not available")
+            return
+        end
+    end
+    
     -- Only update if value changed significantly
     if math.floor(display.current_value) == math.floor(value) and display.display_id ~= nil then
         return
@@ -304,7 +334,8 @@ function TimerDisplay:updateDisplay(player_id, display, value)
         display.font, 
         display.scale,
         display.z_order,
-        high_id_display_id  -- Pass the high ID to ensure no conflicts
+        high_id_display_id,  -- Pass the high ID to ensure no conflicts
+        display.properties
     )
     display.display_id = new_display_id
 end
@@ -327,7 +358,9 @@ function TimerDisplay:removePlayerDisplay(player_id, display_id)
     if player_data then
         local display = player_data.active_displays[display_id]
         if display and display.display_id then
-            self.font_system:eraseTextDisplay(player_id, display.display_id)
+            if self.font_system then
+                self.font_system:eraseTextDisplay(player_id, display.display_id)
+            end
             player_data.active_displays[display_id] = nil
         end
     end
@@ -340,29 +373,47 @@ function TimerDisplay:removeGlobalDisplay(display_id)
     end
 end
 
-function TimerDisplay:setDisplayPosition(player_id, display_id, x, y)
+function TimerDisplay:setDisplayPosition(player_id, display_id, x, y, properties)
     local player_data = self.player_displays[player_id]
     if player_data then
         local display = player_data.active_displays[display_id]
         if display then
             display.x = x
             display.y = y
+            if type(properties) == "table" then
+                display.properties = display.properties or {}
+                for k, v in pairs(properties) do
+                    display.properties[k] = v
+                end
+            end
             self:updateDisplay(player_id, display, display.current_value)
         end
     end
 end
 
-function TimerDisplay:setGlobalDisplayPosition(display_id, x, y)
+function TimerDisplay:setGlobalDisplayPosition(display_id, x, y, properties)
     local global_display = self.global_displays[display_id]
     if global_display then
         global_display.x = x
         global_display.y = y
+        if type(properties) == "table" then
+            global_display.properties = global_display.properties or {}
+            for k, v in pairs(properties) do
+                global_display.properties[k] = v
+            end
+        end
         
         for player_id, player_data in pairs(self.player_displays) do
             local display = player_data.active_displays[display_id]
             if display then
                 display.x = x
                 display.y = y
+                if type(properties) == "table" then
+                    display.properties = display.properties or {}
+                    for k, v in pairs(properties) do
+                        display.properties[k] = v
+                    end
+                end
                 self:updateDisplay(player_id, display, display.current_value)
             end
         end
@@ -370,6 +421,14 @@ function TimerDisplay:setGlobalDisplayPosition(display_id, x, y)
 end
 
 function TimerDisplay:getTextWidth(text, font_name, scale)
+    if not self.font_system then
+        local ok, fs = pcall(require, "scripts/net-games/displayer/font-system")
+        if ok and fs then
+            self.font_system = fs
+        else
+            return 0
+        end
+    end
     return self.font_system:getTextWidth(text, font_name, scale)
 end
 

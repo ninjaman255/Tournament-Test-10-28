@@ -21,651 +21,648 @@ local processed_rounds_tracking = {} -- tournament_id -> {player_id -> {round = 
 -- Track progress bar overlays per player per tournament
 local progress_bar_overlay_tracking = {} -- tournament_id -> {player_id -> {element_id = true}}
 
-
 -- Squash a mugshot and its frame (compress in y-axis only)
 function TournamentUI.squash_mugshot(player_id, index, mugshot_y_pos)
-    return async(function() 
-        if not player_id or not index then return end
-        local mugshot_properties = {0.8, 0.6, 0.4, 0.2, 0.0}
-        local frame_properties = {1.7, 1.3, 0.9, 0.5, 0.0}
+return async(function()
+if not player_id or not index then return end
+local mugshot_properties = {0.8, 0.6, 0.4, 0.2, 0.0}
+local frame_properties = {1.7, 1.3, 0.9, 0.5, 0.0}
 
-        for i = 1, #mugshot_properties do
-            games.update_ui_element("MUG_" .. index, player_id, {sy =mugshot_properties[i]})
-            games.update_ui_element("MUG_FRAME_" .. index, player_id, {sy = frame_properties[i]})
-            await(Async.sleep(0.05))
-        end
-        -- Apply squash effect
-        
-        print(string.format("[UI] Squashed mugshot %d for player %s (mug: y=0.5, frame: y=0.25)", index, player_id))
-    end)
+    for i = 1, #mugshot_properties do
+        games.update_ui_element("MUG_" .. index, player_id, {sy =mugshot_properties[i]})
+        games.update_ui_element("MUG_FRAME_" .. index, player_id, {sy = frame_properties[i]})
+        await(Async.sleep(0.05))
+    end
+    -- Apply squash effect
+    
+    print(string.format("[UI] Squashed mugshot %d for player %s (mug: y=0.5, frame: y=0.25)", index, player_id))
+end)
 end
 
 -- Unsquash a mugshot and its frame (restore original y-scale)
 function TournamentUI.unsquash_mugshot(player_id, index, mugshot_y_pos)
-    return async(function()
-        if not player_id or not index then return end
-        
-        local mugshot_properties = {0.2, 0.4, 0.6, 0.8, 1.0}
-        local frame_properties = {0.5, 0.9, 1.3, 1.7, 2.0 }
-    
-        for i = 1, #mugshot_properties do
-            games.update_ui_element("MUG_" .. index, player_id, {sy = mugshot_properties[i]})
-            games.update_ui_element("MUG_FRAME_" .. index, player_id, {sy = frame_properties[i]})
-            await(Async.sleep(0.05))
-        end
-    
-        print(string.format("[UI] Unsquashed mugshot %d for player %s (mug: y=1.0, frame: y=0.5)", index, player_id))
-    end)
+return async(function()
+if not player_id or not index then return end
+
+    local mugshot_properties = {0.2, 0.4, 0.6, 0.8, 1.0}
+    local frame_properties = {0.5, 0.9, 1.3, 1.7, 2.0 }
+
+    for i = 1, #mugshot_properties do
+        games.update_ui_element("MUG_" .. index, player_id, {sy = mugshot_properties[i]})
+        games.update_ui_element("MUG_FRAME_" .. index, player_id, {sy = frame_properties[i]})
+        await(Async.sleep(0.05))
+    end
+
+    print(string.format("[UI] Unsquashed mugshot %d for player %s (mug: y=1.0, frame: y=0.5)", index, player_id))
+end)
 end
 
 -- Mark a round as processed for a player
 function TournamentUI.mark_round_processed(tournament_id, player_id, round)
-    if not tournament_id then return end
-    if not processed_rounds_tracking[tournament_id] then
-        processed_rounds_tracking[tournament_id] = {}
-    end
-    if not processed_rounds_tracking[tournament_id][player_id] then
-        processed_rounds_tracking[tournament_id][player_id] = {}
-    end
-    processed_rounds_tracking[tournament_id][player_id][round] = true
+if not tournament_id then return end
+if not processed_rounds_tracking[tournament_id] then
+processed_rounds_tracking[tournament_id] = {}
+end
+if not processed_rounds_tracking[tournament_id][player_id] then
+processed_rounds_tracking[tournament_id][player_id] = {}
+end
+processed_rounds_tracking[tournament_id][player_id][round] = true
 end
 
 -- Check if a round has been processed for a player
 function TournamentUI.is_round_processed(tournament_id, player_id, round)
-    if not tournament_id then return false end
-    return processed_rounds_tracking[tournament_id] 
-           and processed_rounds_tracking[tournament_id][player_id]
-           and processed_rounds_tracking[tournament_id][player_id][round]
+if not tournament_id then return false end
+return processed_rounds_tracking[tournament_id]
+and processed_rounds_tracking[tournament_id][player_id]
+and processed_rounds_tracking[tournament_id][player_id][round]
 end
 
 -- Clear processed rounds tracking
 function TournamentUI.clear_processed_rounds_tracking(player_id, tournament_id)
-    if not tournament_id then return end
-    if processed_rounds_tracking[tournament_id] then
-        processed_rounds_tracking[tournament_id][player_id] = nil
-    end
+if not tournament_id then return end
+if processed_rounds_tracking[tournament_id] then
+processed_rounds_tracking[tournament_id][player_id] = nil
+end
 end
 
 -- Clear progress bar tracking for a player in a tournament
 function TournamentUI.clear_progress_bar_tracking(player_id, tournament_id)
-    if not tournament_id then return end
-    if progress_bar_tracking[tournament_id] then
-        progress_bar_tracking[tournament_id][player_id] = nil
-    end
+if not tournament_id then return end
+if progress_bar_tracking[tournament_id] then
+progress_bar_tracking[tournament_id][player_id] = nil
+end
 end
 
 -- Mark a progress bar tier as spawned for a participant
 function TournamentUI.mark_progress_bar_spawned(tournament_id, player_id, participant_id, tier)
-    if not tournament_id then return end
-    if not progress_bar_tracking[tournament_id] then
-        progress_bar_tracking[tournament_id] = {}
-    end
-    if not progress_bar_tracking[tournament_id][player_id] then
-        progress_bar_tracking[tournament_id][player_id] = {}
-    end
-    if not progress_bar_tracking[tournament_id][player_id][participant_id] then
-        progress_bar_tracking[tournament_id][player_id][participant_id] = {}
-    end
-    progress_bar_tracking[tournament_id][player_id][participant_id][tier] = true
+if not tournament_id then return end
+if not progress_bar_tracking[tournament_id] then
+progress_bar_tracking[tournament_id] = {}
+end
+if not progress_bar_tracking[tournament_id][player_id] then
+progress_bar_tracking[tournament_id][player_id] = {}
+end
+if not progress_bar_tracking[tournament_id][player_id][participant_id] then
+progress_bar_tracking[tournament_id][player_id][participant_id] = {}
+end
+progress_bar_tracking[tournament_id][player_id][participant_id][tier] = true
 end
 
 -- Check if a progress bar tier is already spawned for a participant
 function TournamentUI.has_progress_bar_tier(tournament_id, player_id, participant_id, tier)
-    if not tournament_id then return false end
-    return progress_bar_tracking[tournament_id] 
-           and progress_bar_tracking[tournament_id][player_id]
-           and progress_bar_tracking[tournament_id][player_id][participant_id]
-           and progress_bar_tracking[tournament_id][player_id][participant_id][tier]
+if not tournament_id then return false end
+return progress_bar_tracking[tournament_id]
+and progress_bar_tracking[tournament_id][player_id]
+and progress_bar_tracking[tournament_id][player_id][participant_id]
+and progress_bar_tracking[tournament_id][player_id][participant_id][tier]
 end
 
 -- Clear greyscale tracking for a player in a tournament
 function TournamentUI.clear_greyscale_tracking(player_id, tournament_id)
-    if not tournament_id then return end
-    if greyscale_tracking[tournament_id] then
-        greyscale_tracking[tournament_id][player_id] = nil
-    end
+if not tournament_id then return end
+if greyscale_tracking[tournament_id] then
+greyscale_tracking[tournament_id][player_id] = nil
+end
 end
 
 -- Mark a participant as greyscale for a player in a tournament
 function TournamentUI.mark_greyscale(tournament_id, player_id, participant_id)
-    if not tournament_id then return end
-    if not greyscale_tracking[tournament_id] then
-        greyscale_tracking[tournament_id] = {}
-    end
-    if not greyscale_tracking[tournament_id][player_id] then
-        greyscale_tracking[tournament_id][player_id] = {}
-    end
-    greyscale_tracking[tournament_id][player_id][participant_id] = true
+if not tournament_id then return end
+if not greyscale_tracking[tournament_id] then
+greyscale_tracking[tournament_id] = {}
+end
+if not greyscale_tracking[tournament_id][player_id] then
+greyscale_tracking[tournament_id][player_id] = {}
+end
+greyscale_tracking[tournament_id][player_id][participant_id] = true
 end
 
 -- Check if a participant should be greyscale for a player
 function TournamentUI.is_greyscale(tournament_id, player_id, participant_id)
-    if not tournament_id then return false end
-    return greyscale_tracking[tournament_id] 
-           and greyscale_tracking[tournament_id][player_id]
-           and greyscale_tracking[tournament_id][player_id][participant_id]
+if not tournament_id then return false end
+return greyscale_tracking[tournament_id]
+and greyscale_tracking[tournament_id][player_id]
+and greyscale_tracking[tournament_id][player_id][participant_id]
 end
 
 -- Clear overlay tracking for a player in a tournament
 function TournamentUI.clear_progress_bar_overlay_tracking(player_id, tournament_id)
-    if not tournament_id then return end
-    if progress_bar_overlay_tracking[tournament_id] then
-        progress_bar_overlay_tracking[tournament_id][player_id] = nil
-    end
+if not tournament_id then return end
+if progress_bar_overlay_tracking[tournament_id] then
+progress_bar_overlay_tracking[tournament_id][player_id] = nil
+end
 end
 
 -- Mark an overlay as active for a player
 function TournamentUI.mark_overlay_active(tournament_id, player_id, element_id)
-    if not tournament_id then return end
-    if not progress_bar_overlay_tracking[tournament_id] then
-        progress_bar_overlay_tracking[tournament_id] = {}
-    end
-    if not progress_bar_overlay_tracking[tournament_id][player_id] then
-        progress_bar_overlay_tracking[tournament_id][player_id] = {}
-    end
-    progress_bar_overlay_tracking[tournament_id][player_id][element_id] = true
+if not tournament_id then return end
+if not progress_bar_overlay_tracking[tournament_id] then
+progress_bar_overlay_tracking[tournament_id] = {}
+end
+if not progress_bar_overlay_tracking[tournament_id][player_id] then
+progress_bar_overlay_tracking[tournament_id][player_id] = {}
+end
+progress_bar_overlay_tracking[tournament_id][player_id][element_id] = true
 end
 
 -- Check if an overlay is active for a player
 function TournamentUI.has_overlay_active(tournament_id, player_id, element_id)
-    if not tournament_id then return false end
-    return progress_bar_overlay_tracking[tournament_id] 
-           and progress_bar_overlay_tracking[tournament_id][player_id]
-           and progress_bar_overlay_tracking[tournament_id][player_id][element_id]
+if not tournament_id then return false end
+return progress_bar_overlay_tracking[tournament_id]
+and progress_bar_overlay_tracking[tournament_id][player_id]
+and progress_bar_overlay_tracking[tournament_id][player_id][element_id]
 end
 
 -- Remove all overlays for a player
 function TournamentUI.remove_all_overlays(player_id, tournament_id)
-    if not tournament_id then return end
+if not tournament_id then return end
+
+if progress_bar_overlay_tracking[tournament_id] and 
+   progress_bar_overlay_tracking[tournament_id][player_id] then
     
-    if progress_bar_overlay_tracking[tournament_id] and 
-       progress_bar_overlay_tracking[tournament_id][player_id] then
-        
-        for element_id, _ in pairs(progress_bar_overlay_tracking[tournament_id][player_id]) do
-            games.remove_ui_element(element_id, player_id)
-        end
-        
-        progress_bar_overlay_tracking[tournament_id][player_id] = {}
+    for element_id, _ in pairs(progress_bar_overlay_tracking[tournament_id][player_id]) do
+        games.remove_ui_element(element_id, player_id)
     end
+    
+    progress_bar_overlay_tracking[tournament_id][player_id] = {}
+end
 end
 
 -- Show tournament board to a player
 function TournamentUI.show_board(player_id, tournament_data, view_type, show_all_progress_bars)
-    if not player_id or not tournament_data then
-        print("[UI] Invalid parameters")
-        return false
-    end
+if not player_id or not tournament_data then
+print("[UI] Invalid parameters")
+return false
+end
+
+print(string.format("[UI] Showing board to %s (tournament %d, view: %s, current round: %d, show_all_progress_bars: %s)", 
+      player_id, tournament_data.id, view_type or "default", tournament_data.current_round or 0, tostring(show_all_progress_bars)))
+
+-- Cleanup any existing UI elements but DON'T clear tracking
+TournamentUI.cleanup_ui_elements(player_id)
+
+-- Setup background with optional title
+TournamentUI.setup_background(player_id, tournament_data.config.theme, tournament_data.config.title)
+
+-- Setup bracket elements
+TournamentUI.setup_bracket_elements(player_id)
+
+-- Show participants based on view type
+if view_type == "initial" or view_type == "round0" then
+    -- Show all participants at initial positions
+    TournamentUI.show_initial_participants(player_id, tournament_data)
+else
+    -- Show participants at current positions
+    TournamentUI.show_current_participants(player_id, tournament_data)
     
-    print(string.format("[UI] Showing board to %s (tournament %d, view: %s, current round: %d, show_all_progress_bars: %s)", 
-          player_id, tournament_data.id, view_type or "default", tournament_data.current_round or 0, tostring(show_all_progress_bars)))
-    
-    -- Cleanup any existing UI elements but DON'T clear tracking
-    TournamentUI.cleanup_ui_elements(player_id)
-    
-    -- Setup background with optional title
-    TournamentUI.setup_background(player_id, tournament_data.config.theme, tournament_data.config.title)
-    
-    -- Setup bracket elements
-    TournamentUI.setup_bracket_elements(player_id)
-    
-    -- Show participants based on view type
-    if view_type == "initial" or view_type == "round0" then
-        -- Show all participants at initial positions
-        TournamentUI.show_initial_participants(player_id, tournament_data)
-    else
-        -- Show participants at current positions
-        TournamentUI.show_current_participants(player_id, tournament_data)
-        
-        -- CRITICAL: Apply greyscale to all previously marked losers immediately
-        TournamentUI.apply_existing_greyscale(player_id, tournament_data)
-    end
-    
-    -- CRITICAL FIX: Only show progress bars based on the flag
-    if show_all_progress_bars then
-        -- Show progress bars from all completed and processed rounds
-        TournamentUI.show_all_progress_bars(player_id, tournament_data)
-    else
-        -- Only show progress bars from previous processed rounds
-        TournamentUI.show_previous_round_progress_bars(player_id, tournament_data)
-    end
-    
-    return true
+    -- CRITICAL: Apply greyscale to all previously marked losers immediately
+    TournamentUI.apply_existing_greyscale(player_id, tournament_data)
+end
+
+-- CRITICAL FIX: Only show progress bars based on the flag
+if show_all_progress_bars then
+    -- Show progress bars from all completed and processed rounds
+    TournamentUI.show_all_progress_bars(player_id, tournament_data)
+else
+    -- Only show progress bars from previous processed rounds
+    TournamentUI.show_previous_round_progress_bars(player_id, tournament_data)
+end
+
+return true
 end
 
 -- New function: cleanup UI elements without clearing tracking
 function TournamentUI.cleanup_ui_elements(player_id)
-    TournamentUI.cleanup_participants(player_id)
-    
-    local elements = {
-        "BOARD_BG", "BOARD_GRID", "TOURNEY_TREE", "CHAMPION_TOPPER",
-        "CROWN_1", "CROWN_2", "CHAMPION_INDICATOR",
-        "TIER1_1", "TIER1_2", "TIER1_3", "TIER1_4", "TIER1_5", "TIER1_6", "TIER1_7", "TIER1_8",
-        "TIER2_1", "TIER2_2", "TIER2_3", "TIER2_4",
-        "TIER3_1", "TIER3_2",
-        -- Also clean up any overlays
-        "TIER1_1_OVERLAY", "TIER1_2_OVERLAY", "TIER1_3_OVERLAY", "TIER1_4_OVERLAY", 
-        "TIER1_5_OVERLAY", "TIER1_6_OVERLAY", "TIER1_7_OVERLAY", "TIER1_8_OVERLAY",
-        "TIER2_1_OVERLAY", "TIER2_2_OVERLAY", "TIER2_3_OVERLAY", "TIER2_4_OVERLAY",
-        "TIER3_1_OVERLAY", "TIER3_2_OVERLAY",
-        -- Title Banner setup
-        "TITLE_BANNER",
-    }
-    
-    for _, element in ipairs(elements) do
-        games.remove_ui_element(element, player_id)
-    end
-    games.remove_text("TITLE_BANNER_TEXT", player_id)
-    print("[UI] Cleaned UI elements for " .. player_id)
+TournamentUI.cleanup_participants(player_id)
+
+local elements = {
+    "BOARD_BG", "BOARD_GRID", "TOURNEY_TREE", "CHAMPION_TOPPER",
+    "CROWN_1", "CROWN_2", "CHAMPION_INDICATOR",
+    "TIER1_1", "TIER1_2", "TIER1_3", "TIER1_4", "TIER1_5", "TIER1_6", "TIER1_7", "TIER1_8",
+    "TIER2_1", "TIER2_2", "TIER2_3", "TIER2_4",
+    "TIER3_1", "TIER3_2",
+    -- Also clean up any overlays
+    "TIER1_1_OVERLAY", "TIER1_2_OVERLAY", "TIER1_3_OVERLAY", "TIER1_4_OVERLAY", 
+    "TIER1_5_OVERLAY", "TIER1_6_OVERLAY", "TIER1_7_OVERLAY", "TIER1_8_OVERLAY",
+    "TIER2_1_OVERLAY", "TIER2_2_OVERLAY", "TIER2_3_OVERLAY", "TIER2_4_OVERLAY",
+    "TIER3_1_OVERLAY", "TIER3_2_OVERLAY",
+    -- Title Banner setup
+    "TITLE_BANNER",
+}
+
+for _, element in ipairs(elements) do
+    games.remove_ui_element(element, player_id)
+end
+games.remove_text("TITLE_BANNER_TEXT", player_id)
+print("[UI] Cleaned UI elements for " .. player_id)
 end
 
 -- Cleanup all UI and tracking
 function TournamentUI.cleanup(player_id, tournament_id)
-    TournamentUI.cleanup_ui_elements(player_id)
-    
-    -- Clear tracking for this player in this tournament
-    if tournament_id then
-        TournamentUI.clear_greyscale_tracking(player_id, tournament_id)
-        TournamentUI.clear_progress_bar_tracking(player_id, tournament_id)
-        TournamentUI.clear_processed_rounds_tracking(player_id, tournament_id)
-        TournamentUI.clear_progress_bar_overlay_tracking(player_id, tournament_id)
-    end
-    
-    print("[UI] Cleaned UI and tracking for " .. player_id)
+TournamentUI.cleanup_ui_elements(player_id)
+
+-- Clear tracking for this player in this tournament
+if tournament_id then
+    TournamentUI.clear_greyscale_tracking(player_id, tournament_id)
+    TournamentUI.clear_progress_bar_tracking(player_id, tournament_id)
+    TournamentUI.clear_processed_rounds_tracking(player_id, tournament_id)
+    TournamentUI.clear_progress_bar_overlay_tracking(player_id, tournament_id)
+end
+
+print("[UI] Cleaned UI and tracking for " .. player_id)
 end
 
 -- New function to apply existing greyscale states
 function TournamentUI.apply_existing_greyscale(player_id, tournament_data)
-    if not tournament_data or not tournament_data.id then return end
+if not tournament_data or not tournament_data.id then return end
+
+-- Check if this player has any greyscale tracking for this tournament
+if greyscale_tracking[tournament_data.id] and 
+   greyscale_tracking[tournament_data.id][player_id] then
     
-    -- Check if this player has any greyscale tracking for this tournament
-    if greyscale_tracking[tournament_data.id] and 
-       greyscale_tracking[tournament_data.id][player_id] then
-        
-        local greyscaled_participants = greyscale_tracking[tournament_data.id][player_id]
-        
-        -- Apply greyscale to each marked participant
-        for participant_id, _ in pairs(greyscaled_participants) do
-            -- Find this participant's current position
-            for i, position in ipairs(tournament_data.ui_state.positions) do
-                if position.participant_id == participant_id then
-                    -- Apply greyscale effect
-                    games.update_ui_element("MUG_" .. i, player_id, constants.sepia_properties)
-                    print(string.format("[UI] Applied existing greyscale to mugshot %d for player %s", i, player_id))
-                    break
-                end
+    local greyscaled_participants = greyscale_tracking[tournament_data.id][player_id]
+    
+    -- Apply greyscale to each marked participant
+    for participant_id, _ in pairs(greyscaled_participants) do
+        -- Find this participant's current position
+        for i, position in ipairs(tournament_data.ui_state.positions) do
+            if position.participant_id == participant_id then
+                -- Apply greyscale effect
+                games.update_ui_element("MUG_" .. i, player_id, constants.sepia_properties)
+                print(string.format("[UI] Applied existing greyscale to mugshot %d for player %s", i, player_id))
+                break
             end
         end
     end
+end
 end
 
 -- Show progress bars from all completed and processed rounds
 function TournamentUI.show_all_progress_bars(player_id, tournament_data)
-    local round = tournament_data.current_round or 0
-    
-    -- Show progress bars for all completed rounds that are processed
-    for r = 1, round - 1 do
-        if TournamentUI.is_round_processed(tournament_data.id, player_id, r) then
-            TournamentUI.show_progress_bars_for_specific_round(player_id, tournament_data, r, false)
-        end
+local round = tournament_data.current_round or 0
+
+-- Show progress bars for all completed rounds that are processed
+for r = 1, round - 1 do
+    if TournamentUI.is_round_processed(tournament_data.id, player_id, r) then
+        TournamentUI.show_progress_bars_for_specific_round(player_id, tournament_data, r, false)
     end
+end
 end
 
 -- Show progress bars for a specific round
 function TournamentUI.show_progress_bars_for_specific_round(player_id, tournament_data, round, check_processed)
-    check_processed = check_processed or false  -- Default to false when called from show_all_progress_bars
-    
-    -- Debug: Check if round is processed
-    local is_processed = TournamentUI.is_round_processed(tournament_data.id, player_id, round)
-    print(string.format("[UI] Checking Round %d for player %s: is_processed=%s, check_processed=%s", 
-          round, player_id, tostring(is_processed), tostring(check_processed)))
-    
-    -- If check_processed is true and this round hasn't been processed for this player, skip
-    if check_processed and not is_processed then
-        print(string.format("[UI] Skipping Round %d progress bars for player %s (not processed yet, check_processed: true)", 
-              round, player_id))
-        return
-    end
-    
-    local ui_positions = require("scripts/net-game-tourney/ui-pos")
-    
-    if round == 1 and tournament_data.matches.round1 then
-        for match_index, match in ipairs(tournament_data.matches.round1) do
-            if match.completed and match.winner then
-                -- Determine which participant won
-                local winner_is_player1 = (match.winner.id == match.player1.id)
-                local progress_bar_index = ui_positions.get_progress_bar_index(1, match_index, winner_is_player1)
-                
-                local bottom_positions = ui_positions.get_progress_bar_positions("bottom")
-                if bottom_positions[progress_bar_index] then
-                    TournamentUI.add_progress_bar(player_id, "TIER1_" .. progress_bar_index, "bottom", 
-                        bottom_positions[progress_bar_index].x, bottom_positions[progress_bar_index].y, 
-                        bottom_positions[progress_bar_index].z, progress_bar_index)
-                    print(string.format("[UI] Showed Round 1 progress bar %d for player %s", 
-                          progress_bar_index, player_id))
-                end
-            end
-        end
-    elseif round == 2 and tournament_data.matches.round2 then
-        for match_index, match in ipairs(tournament_data.matches.round2) do
-            if match.completed and match.winner then
-                -- Determine which participant won
-                local winner_is_player1 = (match.winner.id == match.player1.id)
-                local progress_bar_index = ui_positions.get_progress_bar_index(2, match_index, winner_is_player1)
-                
-                local middle_positions = ui_positions.get_progress_bar_positions("middle")
-                if middle_positions[progress_bar_index] then
-                    TournamentUI.add_progress_bar(player_id, "TIER2_" .. progress_bar_index, "middle", 
-                        middle_positions[progress_bar_index].x, middle_positions[progress_bar_index].y, 
-                        middle_positions[progress_bar_index].z, progress_bar_index)
-                    print(string.format("[UI] Showed Round 2 progress bar %d for player %s", 
-                          progress_bar_index, player_id))
-                end
-            end
-        end
-    elseif round == 3 and tournament_data.matches.round3 and tournament_data.matches.round3[1] then
-        local final_match = tournament_data.matches.round3[1]
-        if final_match.completed and final_match.winner then
+check_processed = check_processed or false -- Default to false when called from show_all_progress_bars
+
+-- Debug: Check if round is processed
+local is_processed = TournamentUI.is_round_processed(tournament_data.id, player_id, round)
+print(string.format("[UI] Checking Round %d for player %s: is_processed=%s, check_processed=%s", 
+      round, player_id, tostring(is_processed), tostring(check_processed)))
+
+-- If check_processed is true and this round hasn't been processed for this player, skip
+if check_processed and not is_processed then
+    print(string.format("[UI] Skipping Round %d progress bars for player %s (not processed yet, check_processed: true)", 
+          round, player_id))
+    return
+end
+
+local ui_positions = require("scripts/net-game-tourney/ui-pos")
+
+if round == 1 and tournament_data.matches.round1 then
+    for match_index, match in ipairs(tournament_data.matches.round1) do
+        if match.completed and match.winner then
             -- Determine which participant won
-            local winner_is_player1 = (final_match.winner.id == final_match.player1.id)
-            local progress_bar_index = ui_positions.get_progress_bar_index(3, 1, winner_is_player1)
+            local winner_is_player1 = (match.winner.id == match.player1.id)
+            local progress_bar_index = ui_positions.get_progress_bar_index(1, match_index, winner_is_player1)
             
-            local top_positions = ui_positions.get_progress_bar_positions("top")
-            if top_positions[progress_bar_index] then
-                TournamentUI.add_progress_bar(player_id, "TIER3_" .. progress_bar_index, "top", 
-                    top_positions[progress_bar_index].x, top_positions[progress_bar_index].y, 
-                    top_positions[progress_bar_index].z, progress_bar_index)
-                print(string.format("[UI] Showed Round 3 progress bar %d for player %s", 
+            local bottom_positions = ui_positions.get_progress_bar_positions("bottom")
+            if bottom_positions[progress_bar_index] then
+                TournamentUI.add_progress_bar(player_id, "TIER1_" .. progress_bar_index, "bottom", 
+                    bottom_positions[progress_bar_index].x, bottom_positions[progress_bar_index].y, 
+                    bottom_positions[progress_bar_index].z, progress_bar_index)
+                print(string.format("[UI] Showed Round 1 progress bar %d for player %s", 
                       progress_bar_index, player_id))
             end
         end
     end
+elseif round == 2 and tournament_data.matches.round2 then
+    for match_index, match in ipairs(tournament_data.matches.round2) do
+        if match.completed and match.winner then
+            -- Determine which participant won
+            local winner_is_player1 = (match.winner.id == match.player1.id)
+            local progress_bar_index = ui_positions.get_progress_bar_index(2, match_index, winner_is_player1)
+            
+            local middle_positions = ui_positions.get_progress_bar_positions("middle")
+            if middle_positions[progress_bar_index] then
+                TournamentUI.add_progress_bar(player_id, "TIER2_" .. progress_bar_index, "middle", 
+                    middle_positions[progress_bar_index].x, middle_positions[progress_bar_index].y, 
+                    middle_positions[progress_bar_index].z, progress_bar_index)
+                print(string.format("[UI] Showed Round 2 progress bar %d for player %s", 
+                      progress_bar_index, player_id))
+            end
+        end
+    end
+elseif round == 3 and tournament_data.matches.round3 and tournament_data.matches.round3[1] then
+    local final_match = tournament_data.matches.round3[1]
+    if final_match.completed and final_match.winner then
+        -- Determine which participant won
+        local winner_is_player1 = (final_match.winner.id == final_match.player1.id)
+        local progress_bar_index = ui_positions.get_progress_bar_index(3, 1, winner_is_player1)
+        
+        local top_positions = ui_positions.get_progress_bar_positions("top")
+        if top_positions[progress_bar_index] then
+            TournamentUI.add_progress_bar(player_id, "TIER3_" .. progress_bar_index, "top", 
+                top_positions[progress_bar_index].x, top_positions[progress_bar_index].y, 
+                top_positions[progress_bar_index].z, progress_bar_index)
+            print(string.format("[UI] Showed Round 3 progress bar %d for player %s", 
+                  progress_bar_index, player_id))
+        end
+    end
+end
 end
 
 -- Updated function to show only previous processed round progress bars
 function TournamentUI.show_previous_round_progress_bars(player_id, tournament_data)
-    local current_round = tournament_data.current_round or 0
-    
-    -- Show progress bars for all processed previous rounds only
-    for r = 1, current_round - 1 do
-        -- Only show progress bars for rounds that have been processed one-by-one
-        if TournamentUI.is_round_processed(tournament_data.id, player_id, r) then
-            TournamentUI.show_progress_bars_for_specific_round(player_id, tournament_data, r, false)
-            print(string.format("[UI] Showing progress bars for Round %d (processed: true, current round: %d)", r, current_round))
-        else
-            print(string.format("[UI] Skipping Round %d progress bars (not processed yet, current round: %d)", r, current_round))
-        end
+local current_round = tournament_data.current_round or 0
+
+-- Show progress bars for all processed previous rounds only
+for r = 1, current_round - 1 do
+    -- Only show progress bars for rounds that have been processed one-by-one
+    if TournamentUI.is_round_processed(tournament_data.id, player_id, r) then
+        TournamentUI.show_progress_bars_for_specific_round(player_id, tournament_data, r, false)
+        print(string.format("[UI] Showing progress bars for Round %d (processed: true, current round: %d)", r, current_round))
+    else
+        print(string.format("[UI] Skipping Round %d progress bars (not processed yet, current round: %d)", r, current_round))
     end
-    
-    print(string.format("[UI] Showed progress bars for processed rounds 1 to %d (current round: %d)", 
-          math.max(0, current_round - 1), current_round))
+end
+
+print(string.format("[UI] Showed progress bars for processed rounds 1 to %d (current round: %d)", 
+      math.max(0, current_round - 1), current_round))
 end
 
 -- Show participants at initial positions (all at bottom)
 function TournamentUI.show_initial_participants(player_id, tournament_data)
-    local base_positions = ui_positions.get_mugshot_positions(0)
+local base_positions = ui_positions.get_mugshot_positions(0)
+
+for i = 1, math.min(#tournament_data.participants, 8) do
+    local participant = tournament_data.participants[i]
+    local pos = base_positions[i]
     
-    for i = 1, math.min(#tournament_data.participants, 8) do
-        local participant = tournament_data.participants[i]
-        local pos = base_positions[i]
-        
-        if participant and participant.mugshot then
-            TournamentUI.add_mugshot(player_id, i, participant.mugshot, pos.x, pos.y, pos.z)
-        end
+    if participant and participant.mugshot then
+        TournamentUI.add_mugshot(player_id, i, participant.mugshot, pos.x, pos.y, pos.z)
     end
+end
 end
 
 -- Show participants at current positions
 function TournamentUI.show_current_participants(player_id, tournament_data)
-    if not tournament_data.ui_state or not tournament_data.ui_state.positions then
-        TournamentUI.show_initial_participants(player_id, tournament_data)
-        return
+if not tournament_data.ui_state or not tournament_data.ui_state.positions then
+TournamentUI.show_initial_participants(player_id, tournament_data)
+return
+end
+
+for i, position in ipairs(tournament_data.ui_state.positions) do
+    -- Find participant
+    local participant
+    for _, p in ipairs(tournament_data.participants) do
+        if p.id == position.participant_id then
+            participant = p
+            break
+        end
     end
     
-    for i, position in ipairs(tournament_data.ui_state.positions) do
-        -- Find participant
-        local participant
-        for _, p in ipairs(tournament_data.participants) do
-            if p.id == position.participant_id then
-                participant = p
-                break
-            end
-        end
+    if participant and participant.mugshot then
+        TournamentUI.add_mugshot(player_id, i, participant.mugshot, position.x, position.y, position.z)
         
-        if participant and participant.mugshot then
-            TournamentUI.add_mugshot(player_id, i, participant.mugshot, position.x, position.y, position.z)
-            
-            -- Apply greyscale if this participant was marked as greyscale in any previous round
-            if TournamentUI.is_greyscale(tournament_data.id, player_id, participant.id) then
-                games.update_ui_element("MUG_" .. i, player_id, constants.sepia_properties)
-                print(string.format("[UI] Starting with greyscaled mugshot %d for player %s", i, player_id))
-            end
+        -- Apply greyscale if this participant was marked as greyscale in any previous round
+        if TournamentUI.is_greyscale(tournament_data.id, player_id, participant.id) then
+            games.update_ui_element("MUG_" .. i, player_id, constants.sepia_properties)
+            print(string.format("[UI] Starting with greyscaled mugshot %d for player %s", i, player_id))
         end
     end
+end
 end
 
 -- Show participants (alias for show_current_participants)
 function TournamentUI.show_participants(player_id, tournament_data)
-    TournamentUI.show_current_participants(player_id, tournament_data)
+TournamentUI.show_current_participants(player_id, tournament_data)
 end
 
 -- Show champion view
 function TournamentUI.show_champion_view(player_id, tournament_data)
-    -- First show all participants at current positions
-    TournamentUI.show_current_participants(player_id, tournament_data)
-    
-    -- Highlight champion
-    local winner = tournament_data.matches.round3 and tournament_data.matches.round3[1] and 
-                   tournament_data.matches.round3[1].winner
-    if winner then
-        -- Add crown or other champion indicator
-        
-        -- Apply greyscale to all non-champion participants
-        for i, p in ipairs(tournament_data.participants) do
-            if p.id ~= winner.id then
-                games.update_ui_element("MUG_" .. i, player_id, constants.sepia_properties)
-                -- Mark as greyscale for tracking
-                TournamentUI.mark_greyscale(tournament_data.id, player_id, p.id)
-            end
-        end
+-- First show all participants at current positions
+TournamentUI.show_current_participants(player_id, tournament_data)
 
-        -- Announce champion
-        Net.message_player(player_id, "CHAMPION: " .. winner.name)
+-- Highlight champion
+local winner = tournament_data.matches.round3 and tournament_data.matches.round3[1] and 
+               tournament_data.matches.round3[1].winner
+if winner then
+    -- Add crown or other champion indicator
+    
+    -- Apply greyscale to all non-champion participants
+    for i, p in ipairs(tournament_data.participants) do
+        if p.id ~= winner.id then
+            games.update_ui_element("MUG_" .. i, player_id, constants.sepia_properties)
+            -- Mark as greyscale for tracking
+            TournamentUI.mark_greyscale(tournament_data.id, player_id, p.id)
+        end
     end
+
+    -- Announce champion
+    Net.message_player(player_id, "CHAMPION: " .. winner.name)
+end
 end
 
 -- Setup background with optional title
 function TournamentUI.setup_background(player_id, theme, title_text)
-    theme = theme or "red_orange_bn4"
-    local bg_paths = constants.bracket_background_path[theme]
-    
-    if not bg_paths then
-        print("[UI] Theme not found: " .. theme)
-        bg_paths = constants.bracket_background_path.red_orange_bn4
-    end
-    
-    -- Background gradient
-    local bg_pos = ui_positions.ui_element_positions.background
-    games.add_ui_element("BOARD_BG", player_id, 
-        bg_paths.gradient_texture,
-        constants.default_background_anim_path_bn4,
-        "BG", bg_pos.x, bg_pos.y, bg_pos.z)
-    
-    -- Grid
-    local grid_pos = ui_positions.ui_element_positions.grid
-    games.add_ui_element("BOARD_GRID", player_id,
-        bg_paths.grid_texture,
-        constants.default_grid_anim_path_bn4,
-        "UI", grid_pos.x, grid_pos.y, grid_pos.z)
-    
-    -- Setup title banner with optional custom title
-    TournamentUI.setup_title_banner(player_id, title_text)
+theme = theme or "red_orange_bn4"
+local bg_paths = constants.bracket_background_path[theme]
+
+if not bg_paths then
+    print("[UI] Theme not found: " .. theme)
+    bg_paths = constants.bracket_background_path.red_orange_bn4
+end
+
+-- Background gradient
+local bg_pos = ui_positions.ui_element_positions.background
+games.add_ui_element("BOARD_BG", player_id, 
+    bg_paths.gradient_texture,
+    constants.default_background_anim_path_bn4,
+    "BG", {x = bg_pos.x, y = bg_pos.y, z = bg_pos.z})
+
+-- Grid
+local grid_pos = ui_positions.ui_element_positions.grid
+games.add_ui_element("BOARD_GRID", player_id,
+    bg_paths.grid_texture,
+    constants.default_grid_anim_path_bn4,
+    "UI", {x = grid_pos.x, y = grid_pos.y, z = grid_pos.z})
+
+-- Setup title banner with optional custom title
+TournamentUI.setup_title_banner(player_id, title_text)
 end
 
 function TournamentUI.setup_title_banner(player_id, title_text)
-    -- Title banner
-    local banner_pos = ui_positions.ui_element_positions.title_banner
-    games.add_ui_element("TITLE_BANNER", player_id,
-        "/server/assets/tourney/title-banner.png",
-        "/server/assets/tourney/title-banner.anim",
-        "RED", banner_pos.x, banner_pos.y, banner_pos.z)
-    -- Title banner text
-    local text = "Custom Tournament"
-    if title_text ~= nil and title_text ~= "" then
-        text = title_text
-    end 
+-- Title banner
+local banner_pos = ui_positions.ui_element_positions.title_banner
+games.add_ui_element("TITLE_BANNER", player_id,
+"/server/assets/tourney/title-banner.png",
+"/server/assets/tourney/title-banner.anim",
+"RED", {x = banner_pos.x, y = banner_pos.y, z = banner_pos.z})
+-- Title banner text
+local text = "Custom Tournament"
+if title_text ~= nil and title_text ~= "" then
+text = title_text
+end
 
-    local text_width = games.get_text_width(text)
-    local half_text_width = text_width / 4
-    local screen_center = 120
-    
-    local text_x = screen_center - half_text_width
-    
-    print("WIDTH OF TITLE IS "..text_width.. " --IMPORTANT--")
-    games.draw_text("TITLE_BANNER_TEXT", player_id, text, text_x, 6, 1,nil,nil, {a = 255, r = 10, g = 155, b = 155, opacity =255, color_mode = 2})
+local text_width = games.get_text_width(text, nil, nil)
+local half_text_width = text_width / 4
+local screen_center = 120
+
+local text_x = screen_center - half_text_width
+
+print("WIDTH OF TITLE IS "..text_width.. " --IMPORTANT--")
+games.draw_text("TITLE_BANNER_TEXT", player_id, text, text_x, 6, 1, nil, nil, {a = 155, r = 10, g = 155, b = 155, opacity = 155, color_mode = 2})
 end
 
 -- Setup bracket elements
 function TournamentUI.setup_bracket_elements(player_id)
-    -- Bracket graphic
-    local tree_pos = ui_positions.ui_element_positions.tournament_tree
-    games.add_ui_element("TOURNEY_TREE", player_id,
-        constants.bracket_bm_bn4,
-        constants.default_bracket_anim_path_bn4,
-        "UI", tree_pos.x, tree_pos.y, tree_pos.z)
-    
-    -- Champion topper
-    local topper_pos = ui_positions.ui_element_positions.champion_topper
-    games.add_ui_element("CHAMPION_TOPPER", player_id,
-        constants.champion_topper_bn4,
-        constants.champion_topper_bn4_anim,
-        "UI", topper_pos.x, topper_pos.y, topper_pos.z)
-    
-    -- Crowns
-    local crown1_pos = ui_positions.ui_element_positions.crown_1
-    games.add_ui_element("CROWN_1", player_id,
-        constants.crown_texture_path,
-        constants.crown_anim_path,
-        "INACTIVE", crown1_pos.x, crown1_pos.y, crown1_pos.z)
-    
-    local crown2_pos = ui_positions.ui_element_positions.crown_2
-    games.add_ui_element("CROWN_2", player_id,
-        constants.crown_texture_path,
-        constants.crown_anim_path,
-        "INACTIVE", crown2_pos.x, crown2_pos.y, crown2_pos.z)
+-- Bracket graphic
+local tree_pos = ui_positions.ui_element_positions.tournament_tree
+games.add_ui_element("TOURNEY_TREE", player_id,
+constants.bracket_bm_bn4,
+constants.default_bracket_anim_path_bn4,
+"UI", {x = tree_pos.x, y = tree_pos.y, z = tree_pos.z})
+
+-- Champion topper
+local topper_pos = ui_positions.ui_element_positions.champion_topper
+games.add_ui_element("CHAMPION_TOPPER", player_id,
+    constants.champion_topper_bn4,
+    constants.champion_topper_bn4_anim,
+    "UI", {x = topper_pos.x, y = topper_pos.y, z = topper_pos.z})
+
+-- Crowns
+local crown1_pos = ui_positions.ui_element_positions.crown_1
+games.add_ui_element("CROWN_1", player_id,
+    constants.crown_texture_path,
+    constants.crown_anim_path,
+    "INACTIVE", {x = crown1_pos.x, y = crown1_pos.y, z = crown1_pos.z})
+
+local crown2_pos = ui_positions.ui_element_positions.crown_2
+games.add_ui_element("CROWN_2", player_id,
+    constants.crown_texture_path,
+    constants.crown_anim_path,
+    "INACTIVE", {x = crown2_pos.x, y = crown2_pos.y, z = crown2_pos.z})
 end
 
 -- Add a mugshot
 function TournamentUI.add_mugshot(player_id, index, mugshot_texture, x, y, z)
-    local frame_id = "MUG_FRAME_" .. index
-    local mug_id = "MUG_" .. index
-    
-    -- Frame
-    games.add_ui_element(frame_id, player_id,
-        constants.mug_frame_texture_path,
-        constants.mug_frame_anim_path, "ACTIVE", x, y, 4)
-    
-    -- Mugshot
-    games.add_ui_element(mug_id, player_id,
-        mugshot_texture,
-        constants.default_mug_anim,
-        "UI", x, y, 3, 1, 1)
+local frame_id = "MUG_FRAME_" .. index
+local mug_id = "MUG_" .. index
+
+-- Frame
+games.add_ui_element(frame_id, player_id,
+    constants.mug_frame_texture_path,
+    constants.mug_frame_anim_path, "ACTIVE", {x = x, y = y, z = 4})
+
+-- Mugshot
+games.add_ui_element(mug_id, player_id,
+    mugshot_texture,
+    constants.default_mug_anim,
+    "UI", {x = x, y = y, z = 3, sx = 1, sy = 1})
 end
 
 -- Add a progress bar with alternating direction based on position in tier
 function TournamentUI.add_progress_bar(player_id, element_id, tier, x, y, z, position_index)
-    local paths = constants.progress_bar_path
-    
-    local anim_state = "INACTIVE"
-    
-    -- Determine direction based on position index (odd = left, even = right)
-    -- This ensures alternation starting with left
-    if tier == "bottom" then
-        -- For bottom tier, we have 8 positions
-        anim_state = (position_index % 2 == 1) and "L1_MOVE" or "R1_MOVE"
-    elseif tier == "middle" then
-        -- For middle tier, we have 4 positions
-        anim_state = (position_index % 2 == 1) and "L2_MOVE" or "R2_MOVE"
-    elseif tier == "top" then
-        -- For top tier, we have 2 positions
-        anim_state = (position_index % 2 == 1) and "L3_MOVE" or "R3_MOVE"
-    end
-    
-    games.add_ui_element(element_id, player_id,
-        paths[tier .. "_tier"].texture,
-        paths[tier .. "_tier"].anim,
-        anim_state, x, y, z)
-    
-    print(string.format("[UI] Added progress bar %s at tier %s with anim %s (index: %d)", 
-          element_id, tier, anim_state, position_index))
+local paths = constants.progress_bar_path
+
+local anim_state = "INACTIVE"
+
+-- Determine direction based on position index (odd = left, even = right)
+-- This ensures alternation starting with left
+if tier == "bottom" then
+    -- For bottom tier, we have 8 positions
+    anim_state = (position_index % 2 == 1) and "L1_MOVE" or "R1_MOVE"
+elseif tier == "middle" then
+    -- For middle tier, we have 4 positions
+    anim_state = (position_index % 2 == 1) and "L2_MOVE" or "R2_MOVE"
+elseif tier == "top" then
+    -- For top tier, we have 2 positions
+    anim_state = (position_index % 2 == 1) and "L3_MOVE" or "R3_MOVE"
+end
+
+games.add_ui_element(element_id, player_id,
+    paths[tier .. "_tier"].texture,
+    paths[tier .. "_tier"].anim,
+    anim_state, {x = x, y = y, z = z})
+
+print(string.format("[UI] Added progress bar %s at tier %s with anim %s (index: %d)", 
+      element_id, tier, anim_state, position_index))
 end
 
 -- Add a progress bar with overlay (for one-by-one display)
 function TournamentUI.add_progress_bar_with_overlay(player_id, element_id, tier, x, y, z, position_index, overlay_x, overlay_y, overlay_z)
-    local progress_bar_paths = constants.progress_bar_path
-    local progress_bar_overlay_paths = constants.progress_bar_overlay
-    
-    local anim_state = "INACTIVE"
-    
-    -- Determine direction based on position index (odd = left, even = right)
-    if tier == "bottom" then
-        anim_state = (position_index % 2 == 1) and "L1_MOVE" or "R1_MOVE"
-    elseif tier == "middle" then
-        anim_state = (position_index % 2 == 1) and "L2_MOVE" or "R2_MOVE"
-    elseif tier == "top" then
-        anim_state = (position_index % 2 == 1) and "L3_MOVE" or "R3_MOVE"
-    end
-    
-    -- Add the progress bar
-    games.add_ui_element(element_id, player_id,
-        progress_bar_paths[tier .. "_tier"].texture,
-        progress_bar_paths[tier .. "_tier"].anim,
-        anim_state, x, y, z)
-    
-    -- Add the overlay (only for one-by-one display)
-    local overlay_id = element_id .. "_OVERLAY"
+local progress_bar_paths = constants.progress_bar_path
+local progress_bar_overlay_paths = constants.progress_bar_overlay
 
-    games.add_ui_element(overlay_id, player_id,
-        progress_bar_overlay_paths.blue_moon[tier.."_tier"].texture,
-        progress_bar_overlay_paths.blue_moon[tier.."_tier"].anim,
-        anim_state,
-        overlay_x,
-        overlay_y,
-        overlay_z)
-    
-    print(string.format("[UI] Added progress bar %s at tier %s with overlay (index: %d)", 
-          element_id, tier, position_index))
-    
-    return overlay_id
+local anim_state = "INACTIVE"
+
+-- Determine direction based on position index (odd = left, even = right)
+if tier == "bottom" then
+    anim_state = (position_index % 2 == 1) and "L1_MOVE" or "R1_MOVE"
+elseif tier == "middle" then
+    anim_state = (position_index % 2 == 1) and "L2_MOVE" or "R2_MOVE"
+elseif tier == "top" then
+    anim_state = (position_index % 2 == 1) and "L3_MOVE" or "R3_MOVE"
+end
+
+-- Add the progress bar
+games.add_ui_element(element_id, player_id,
+    progress_bar_paths[tier .. "_tier"].texture,
+    progress_bar_paths[tier .. "_tier"].anim,
+    anim_state, {x = x, y = y, z = z})
+
+-- Add the overlay (only for one-by-one display)
+local overlay_id = element_id .. "_OVERLAY"
+
+games.add_ui_element(overlay_id, player_id,
+    progress_bar_overlay_paths.blue_moon[tier.."_tier"].texture,
+    progress_bar_overlay_paths.blue_moon[tier.."_tier"].anim,
+    anim_state,
+    {x = overlay_x, y = overlay_y, z = overlay_z})
+
+print(string.format("[UI] Added progress bar %s at tier %s with overlay (index: %d)", 
+      element_id, tier, position_index))
+
+return overlay_id
 end
 
 -- Remove progress bar overlay
 function TournamentUI.remove_progress_bar_overlay(player_id, overlay_id)
-    games.remove_ui_element(overlay_id, player_id)
-    print(string.format("[UI] Removed progress bar overlay %s for player %s", overlay_id, player_id))
+games.remove_ui_element(overlay_id, player_id)
+print(string.format("[UI] Removed progress bar overlay %s for player %s", overlay_id, player_id))
 end
 
 -- Cleanup participants
 function TournamentUI.cleanup_participants(player_id)
-    for i = 1, 8 do
-        games.remove_ui_element("MUG_FRAME_" .. i, player_id)
-        games.remove_ui_element("MUG_" .. i, player_id)
-    end
+for i = 1, 8 do
+games.remove_ui_element("MUG_FRAME_" .. i, player_id)
+games.remove_ui_element("MUG_" .. i, player_id)
+end
 end
 
 -- Fade transition
 function TournamentUI.show_transition(player_id, fade_in, duration)
-    duration = duration or 0.3
-    
-    if fade_in then
-        Net.fade_player_camera(player_id, { r = 0, g = 0, b = 0, a = 0 }, duration)
-    else
-        Net.fade_player_camera(player_id, { r = 0, g = 0, b = 0, a = 255 }, duration)
-    end
+duration = duration or 0.3
+
+if fade_in then
+    Net.fade_player_camera(player_id, { r = 0, g = 0, b = 0, a = 0 }, duration)
+else
+    Net.fade_player_camera(player_id, { r = 0, g = 0, b = 0, a = 255 }, duration)
+end
 end
 
 -- Get the current round from tournament data
 function TournamentUI.get_current_round(tournament_data)
-    return tournament_data.current_round or 0
+return tournament_data.current_round or 0
 end
 
 return TournamentUI

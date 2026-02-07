@@ -229,7 +229,7 @@ function Dialogue.prompt_menu(player_id, opts)
   return PromptVertical.menu(player_id, opts)
 end
 
-function Dialogue.start(player_id, script, opts)
+function Dialogue.start(player_id, script, opts, properties)
   ensure_listener()
   attach_tick()
   if _G and _G.NG_TEXTBOX_DEBUG then
@@ -281,6 +281,14 @@ function Dialogue.start(player_id, script, opts)
   -- opts.ui (preferred) or opts.textbox (alias)
   --=====================================================
   local ui = o.ui or o.textbox or nil
+
+  -- Optional sprite properties passthrough (rotation/tint/opacity/etc)
+  -- Priority: explicit arg > opts.properties > ui.properties
+  local props = nil
+  props = merge_props(props, (ui and ui.properties) or nil)
+  props = merge_props(props, o.properties)
+  props = merge_props(props, properties)
+
 
   if ui then
     if ui.font         then o.font = ui.font end
@@ -347,7 +355,9 @@ function Dialogue.start(player_id, script, opts)
       backdrop,
       o.typing_speed,
       ops
-    )
+    ,
+        props
+      )
   else
     -- Create textbox (prefer snake_case wrapper if present, otherwise call createTextBox)
     if Displayer.Text.create_text_box then
@@ -358,6 +368,8 @@ function Dialogue.start(player_id, script, opts)
         backdrop,
         o.typing_speed,
         ops
+      ,
+        props
       )
     else
       created = Displayer.Text.createTextBox(
@@ -367,6 +379,8 @@ function Dialogue.start(player_id, script, opts)
         backdrop,
         o.typing_speed,
         ops
+      ,
+        props
       )
     end
   end

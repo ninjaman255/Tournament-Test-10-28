@@ -2,6 +2,7 @@
 -- Version 1.2 - Complete Method Implementation
 local Displayer = {}
 Displayer.__index = Displayer
+
 function Displayer:init()
     -- Initialize sub-APIs first (as empty tables)
     self.Timer = {}
@@ -73,7 +74,6 @@ function Displayer:_setupSubAPIs()
     local mainInstance = self
     
     -- Timer System API (new)
-
     self.Timer.pausePlayerTimer = function(player_id, timer_id)
         local subsystem = mainInstance:_getSubsystem("TimerSystem", "pausePlayerTimer")
         return subsystem:pausePlayerTimer(player_id, timer_id)
@@ -104,9 +104,27 @@ function Displayer:_setupSubAPIs()
         return subsystem:removePlayerCountdown(player_id, countdown_id)
     end
 
+    -- ADDED: updatePlayerTimer method (required by framework.lua)
+    self.Timer.updatePlayerTimer = function(player_id, timer_id, duration)
+        local subsystem = mainInstance:_getSubsystem("TimerSystem", "updatePlayerTimer")
+        if not subsystem or not player_id or not timer_id then 
+            print("Error: player_id and timer_id are required")
+            return nil 
+        end
+        return subsystem:updatePlayerTimer(player_id, timer_id, duration)
+    end
+
+    -- ADDED: updatePlayerCountdown method (required by framework.lua)
+    self.Timer.updatePlayerCountdown = function(player_id, countdown_id, duration)
+        local subsystem = mainInstance:_getSubsystem("TimerSystem", "updatePlayerCountdown")
+        if not subsystem or not player_id or not countdown_id then 
+            print("Error: player_id and countdown_id are required")
+            return nil 
+        end
+        return subsystem:updatePlayerCountdown(player_id, countdown_id, duration)
+    end
 
     -- Timer System API (original)
-
     self.Timer.createGlobalTimer = function(timer_id, duration, callback, loop)
         local subsystem = mainInstance:_getSubsystem("TimerSystem", "createGlobalTimer")
         if not subsystem or not timer_id then 
@@ -236,40 +254,40 @@ function Displayer:_setupSubAPIs()
     end
 
     -- Timer Display API
-    self.TimerDisplay.createPlayerTimerDisplay = function(player_id, timer_id, x, y, config_name)
+    self.TimerDisplay.createPlayerTimerDisplay = function(player_id, timer_id, x, y, config_name, properties)
         local subsystem = mainInstance:_getSubsystem("TimerDisplaySystem", "createPlayerTimerDisplay")
         if not subsystem or not player_id or not timer_id then 
             print("Error: player_id and timer_id are required")
             return nil 
         end
-        return subsystem:createPlayerTimerDisplay(player_id, timer_id, x or 0, y or 0, config_name or "default")
+        return subsystem:createPlayerTimerDisplay(player_id, timer_id, x or 0, y or 0, config_name or "default", properties)
     end
 
-    self.TimerDisplay.createPlayerCountdownDisplay = function(player_id, countdown_id, x, y, config_name)
+    self.TimerDisplay.createPlayerCountdownDisplay = function(player_id, countdown_id, x, y, config_name, properties)
         local subsystem = mainInstance:_getSubsystem("TimerDisplaySystem", "createPlayerCountdownDisplay")
         if not subsystem or not player_id or not countdown_id then 
             print("Error: player_id and countdown_id are required")
             return nil 
         end
-        return subsystem:createPlayerCountdownDisplay(player_id, countdown_id, x or 0, y or 0, config_name or "default")
+        return subsystem:createPlayerCountdownDisplay(player_id, countdown_id, x or 0, y or 0, config_name or "default", properties)
     end
 
-    self.TimerDisplay.updatePlayerTimerDisplay = function(player_id, timer_id, value)
+    self.TimerDisplay.updatePlayerTimerDisplay = function(player_id, timer_id, value, properties)
         local subsystem = mainInstance:_getSubsystem("TimerDisplaySystem", "updatePlayerTimerDisplay")
         if not subsystem or not player_id or not timer_id then 
             print("Error: player_id and timer_id are required")
             return nil 
         end
-        return subsystem:updatePlayerTimerDisplay(player_id, timer_id, value or 0)
+        return subsystem:updatePlayerTimerDisplay(player_id, timer_id, value or 0, properties)
     end
 
-    self.TimerDisplay.updatePlayerCountdownDisplay = function(player_id, countdown_id, value)
+    self.TimerDisplay.updatePlayerCountdownDisplay = function(player_id, countdown_id, value, properties)
         local subsystem = mainInstance:_getSubsystem("TimerDisplaySystem", "updatePlayerCountdownDisplay")
         if not subsystem or not player_id or not countdown_id then 
             print("Error: player_id and countdown_id are required")
             return nil 
         end
-        return subsystem:updatePlayerCountdownDisplay(player_id, countdown_id, value or 0)
+        return subsystem:updatePlayerCountdownDisplay(player_id, countdown_id, value or 0, properties)
     end
 
     self.TimerDisplay.removePlayerDisplay = function(player_id, display_id)
@@ -281,49 +299,49 @@ function Displayer:_setupSubAPIs()
         return subsystem:removePlayerDisplay(player_id, display_id)
     end
 
-    self.TimerDisplay.setDisplayPosition = function(player_id, display_id, x, y)
+    self.TimerDisplay.setDisplayPosition = function(player_id, display_id, x, y, properties)
         local subsystem = mainInstance:_getSubsystem("TimerDisplaySystem", "setDisplayPosition")
         if not subsystem or not player_id or not display_id then 
             print("Error: player_id and display_id are required")
             return nil 
         end
-        return subsystem:setDisplayPosition(player_id, display_id, x or 0, y or 0)
+        return subsystem:setDisplayPosition(player_id, display_id, x or 0, y or 0, properties)
     end
 
-    self.TimerDisplay.createGlobalTimerDisplay = function(timer_id, x, y, config_name)
+    self.TimerDisplay.createGlobalTimerDisplay = function(timer_id, x, y, config_name, properties)
         local subsystem = mainInstance:_getSubsystem("TimerDisplaySystem", "createGlobalTimerDisplay")
         if not subsystem or not timer_id then 
             print("Error: timer_id is required")
             return nil 
         end
-        return subsystem:createGlobalTimerDisplay(timer_id, x or 0, y or 0, config_name or "default")
+        return subsystem:createGlobalTimerDisplay(timer_id, x or 0, y or 0, config_name or "default", properties)
     end
 
-    self.TimerDisplay.createGlobalCountdownDisplay = function(countdown_id, x, y, config_name)
+    self.TimerDisplay.createGlobalCountdownDisplay = function(countdown_id, x, y, config_name, properties)
         local subsystem = mainInstance:_getSubsystem("TimerDisplaySystem", "createGlobalCountdownDisplay")
         if not subsystem or not countdown_id then 
             print("Error: countdown_id is required")
             return nil 
         end
-        return subsystem:createGlobalCountdownDisplay(countdown_id, x or 0, y or 0, config_name or "default")
+        return subsystem:createGlobalCountdownDisplay(countdown_id, x or 0, y or 0, config_name or "default", properties)
     end
 
-    self.TimerDisplay.updateGlobalTimerDisplay = function(timer_id, value)
+    self.TimerDisplay.updateGlobalTimerDisplay = function(timer_id, value, properties)
         local subsystem = mainInstance:_getSubsystem("TimerDisplaySystem", "updateGlobalTimerDisplay")
         if not subsystem or not timer_id then 
             print("Error: timer_id is required")
             return nil 
         end
-        return subsystem:updateGlobalTimerDisplay(timer_id, value or 0)
+        return subsystem:updateGlobalTimerDisplay(timer_id, value or 0, properties)
     end
 
-    self.TimerDisplay.updateGlobalCountdownDisplay = function(countdown_id, value)
+    self.TimerDisplay.updateGlobalCountdownDisplay = function(countdown_id, value, properties)
         local subsystem = mainInstance:_getSubsystem("TimerDisplaySystem", "updateGlobalCountdownDisplay")
         if not subsystem or not countdown_id then 
             print("Error: countdown_id is required")
             return nil 
         end
-        return subsystem:updateGlobalCountdownDisplay(countdown_id, value or 0)
+        return subsystem:updateGlobalCountdownDisplay(countdown_id, value or 0, properties)
     end
 
     self.TimerDisplay.removeGlobalDisplay = function(display_id)
@@ -335,32 +353,32 @@ function Displayer:_setupSubAPIs()
         return subsystem:removeGlobalDisplay(display_id)
     end
 
-    self.TimerDisplay.setGlobalDisplayPosition = function(display_id, x, y)
+    self.TimerDisplay.setGlobalDisplayPosition = function(display_id, x, y, properties)
         local subsystem = mainInstance:_getSubsystem("TimerDisplaySystem", "setGlobalDisplayPosition")
         if not subsystem or not display_id then 
             print("Error: display_id is required")
             return nil 
         end
-        return subsystem:setGlobalDisplayPosition(display_id, x or 0, y or 0)
+        return subsystem:setGlobalDisplayPosition(display_id, x or 0, y or 0, properties)
     end
 
     -- Text Display API
-    self.Text.drawText = function(player_id, text_id, text, x, y, z_order, font_name, scale)
+    self.Text.drawText = function(player_id, text_id, text, x, y, z_order, font_name, scale, properties)
         local subsystem = mainInstance:_getSubsystem("TextDisplaySystem", "drawText")
         if not subsystem or not player_id or not text then 
             print("Error: player_id and text are required...")
             return nil 
         end
-        return subsystem:drawText(player_id, text_id, text, x or 0, y or 0, z_order or 100, font_name or "THICK", scale or 2.0)
+        return subsystem:drawText(player_id, text_id, text, x or 0, y or 0, z_order or 100, font_name or "THICK", scale or 2.0, properties)
     end
 
-    self.Text.updateText = function(player_id, text_id, new_text)
+    self.Text.updateText = function(player_id, text_id, new_text, properties)
         local subsystem = mainInstance:_getSubsystem("TextDisplaySystem", "updateText")
         if not subsystem or not player_id or not text_id or not new_text then 
             print("Error: player_id, text_id and new_text are required")
             return nil 
         end
-        return subsystem:updateText(player_id, text_id, new_text)
+        return subsystem:updateText(player_id, text_id, new_text, properties)
     end
 
     self.Text.removeText = function(player_id, text_id)
@@ -372,16 +390,26 @@ function Displayer:_setupSubAPIs()
         return subsystem:removeText(player_id, text_id)
     end
 
-    self.Text.setTextPosition = function(player_id, text_id, x, y)
+    -- ADDED: setMarqueePosition method (required by framework.lua)
+    self.Text.setMarqueePosition = function(player_id, marquee_id, x, y)
+        local subsystem = mainInstance:_getSubsystem("TextDisplaySystem", "setMarqueePosition")
+        if not subsystem or not player_id or not marquee_id then 
+            print("Error: player_id and marquee_id are required")
+            return nil 
+        end
+        return subsystem:setMarqueePosition(player_id, marquee_id, x or 0, y or 0)
+    end
+
+    self.Text.setTextPosition = function(player_id, text_id, x, y, properties)
         local subsystem = mainInstance:_getSubsystem("TextDisplaySystem", "setTextPosition")
         if not subsystem or not player_id or not text_id then 
             print("Error: player_id and text_id are required")
             return nil 
         end
-        return subsystem:setTextPosition(player_id, text_id, x or 0, y or 0)
+        return subsystem:setTextPosition(player_id, text_id, x or 0, y or 0, properties)
     end
 
-    self.Text.drawMarqueeText = function(player_id, marquee_id, text, y, font_name, scale, z_order, speed, backdrop)
+    self.Text.drawMarqueeText = function(player_id, marquee_id, text, y, font_name, scale, z_order, speed, backdrop, properties)
         local subsystem = mainInstance:_getSubsystem("TextDisplaySystem", "drawMarqueeText")
         if not subsystem or not player_id or not marquee_id or not text then 
             print("Error: player_id, marquee_id and text are required")
@@ -396,10 +424,12 @@ function Displayer:_setupSubAPIs()
             scale or 2.0, 
             z_order or 100, 
             speed or "medium", 
-            backdrop
+            backdrop,
+            properties
         )
     end
 
+    -- ADDED: setMarqueeSpeed method (required by framework.lua)
     self.Text.setMarqueeSpeed = function(player_id, text_id, speed)
         local subsystem = mainInstance:_getSubsystem("TextDisplaySystem", "setMarqueeSpeed")
         if not subsystem or not player_id or not text_id then 
@@ -409,7 +439,7 @@ function Displayer:_setupSubAPIs()
         return subsystem:setMarqueeSpeed(player_id, text_id, speed)
     end
 
-    self.Text.createTextBox = function(player_id, box_id, text, x, y, width, height, font_name, scale, z_order, backdrop_config, speed, opts)
+    self.Text.createTextBox = function(player_id, box_id, text, x, y, width, height, font_name, scale, z_order, backdrop_config, speed, opts, properties)
         local subsystem = mainInstance:_getSubsystem("TextDisplaySystem", "createTextBox")
         if not subsystem or not player_id or not box_id or not text then 
             print("Error: player_id, box_id and text are required")
@@ -429,11 +459,12 @@ function Displayer:_setupSubAPIs()
             z_order or 100,
             backdrop_config,
             speed or 30,
-            opts or nil
+            opts or nil,
+            properties
         )
     end
 
-    self.Text.resetTextBox = function(player_id, box_id, text, x, y, width, height, font_name, scale, z_order, backdrop_config, speed, opts)
+    self.Text.resetTextBox = function(player_id, box_id, text, x, y, width, height, font_name, scale, z_order, backdrop_config, speed, opts, properties)
         local subsystem = mainInstance:_getSubsystem("TextDisplaySystem", "resetTextBox")
         if not subsystem or not player_id or not box_id or text == nil then
             print("Error: player_id, box_id and text are required")
@@ -453,27 +484,27 @@ function Displayer:_setupSubAPIs()
             z_order or 100,
             backdrop_config,
             speed or 30,
-            opts or nil
+            opts or nil,
+            properties
         )
     end
 
     -- snake_case alias
     if self.Text.resetTextBox and not self.Text.reset_text_box then
-      self.Text.reset_text_box = function(player_id, box_id, text, x, y, width, height, font_name, scale, z_order, backdrop_config, speed, opts)
-        return self.Text.resetTextBox(
-          player_id,
-          box_id,
-          text,
-          x, y, width, height,
-          font_name, scale, z_order,
-          backdrop_config,
-          speed,
-          opts
-        )
-      end
+        self.Text.reset_text_box = function(player_id, box_id, text, x, y, width, height, font_name, scale, z_order, backdrop_config, speed, opts, properties)
+            return self.Text.resetTextBox(
+                player_id,
+                box_id,
+                text,
+                x, y, width, height,
+                font_name, scale, z_order,
+                backdrop_config,
+                speed,
+                opts,
+                properties
+            )
+        end
     end
-
-
 
     self.Text.getTextBoxData = function(player_id, box_id)
         local subsystem = mainInstance:_getSubsystem("TextDisplaySystem", "getTextBoxData")
@@ -491,34 +522,33 @@ function Displayer:_setupSubAPIs()
 
     -- =====================================================
     -- Compatibility + documentation-friendly snake_case API
-    -- (Additive: does not change existing methods)
     -- =====================================================
 
     -- create_text_box(box_id, player_id, ...)
     if self.Text.createTextBox and not self.Text.create_text_box then
-      self.Text.create_text_box = function(player_id, box_id, text, x, y, width, height, font_name, scale, z_order, backdrop_config, speed, opts)
-        return self.Text.createTextBox(
-          player_id,
-          box_id,
-          text,
-          x, y, width, height,
-          font_name,
-          scale,
-          z_order,
-          backdrop_config,
-          speed,
-          opts
-        )
-      end
+        self.Text.create_text_box = function(player_id, box_id, text, x, y, width, height, font_name, scale, z_order, backdrop_config, speed, opts, properties)
+            return self.Text.createTextBox(
+                player_id,
+                box_id,
+                text,
+                x, y, width, height,
+                font_name,
+                scale,
+                z_order,
+                backdrop_config,
+                speed,
+                opts,
+                properties
+            )
+        end
     end
 
     -- advance_text_box(player_id, box_id)
     if self.Text.advanceTextBox and not self.Text.advance_text_box then
-      self.Text.advance_text_box = function(player_id, box_id)
-        return self.Text.advanceTextBox(player_id, box_id)
-      end
+        self.Text.advance_text_box = function(player_id, box_id)
+            return self.Text.advanceTextBox(player_id, box_id)
+        end
     end
-
 
     self.Text.removeTextBox = function(player_id, box_id)
         local subsystem = mainInstance:_getSubsystem("TextDisplaySystem", "removeTextBox")
@@ -531,14 +561,13 @@ function Displayer:_setupSubAPIs()
 
     -- Soft-close (plays close animation, then removes later)
     self.Text.closeTextBox = function(player_id, box_id, opts)
-      local subsystem = mainInstance:_getSubsystem("TextDisplaySystem", "closeTextBox")
-      if not subsystem or not player_id or not box_id then
-        print("Error: player_id and box_id are required")
-        return nil
-      end
-      return subsystem:closeTextBox(player_id, box_id, opts)
+        local subsystem = mainInstance:_getSubsystem("TextDisplaySystem", "closeTextBox")
+        if not subsystem or not player_id or not box_id then
+            print("Error: player_id and box_id are required")
+            return nil
+        end
+        return subsystem:closeTextBox(player_id, box_id, opts)
     end
-
 
     self.Text.isTextBoxCompleted = function(player_id, box_id)
         local subsystem = mainInstance:_getSubsystem("TextDisplaySystem", "isTextBoxCompleted")
@@ -552,10 +581,10 @@ function Displayer:_setupSubAPIs()
     self.Text.getTextBoxState = function(player_id, box_id)
         local subsystem = mainInstance:_getSubsystem("TextDisplaySystem", "getTextBoxState")
         if not subsystem or not player_id or not box_id then
-           print("Error: player_id and box_id are required")
-           return "completed"
+            print("Error: player_id and box_id are required")
+            return "completed"
         end
-    return subsystem:getTextBoxState(player_id, box_id) or "completed"
+        return subsystem:getTextBoxState(player_id, box_id) or "completed"
     end
 
     self.Text.setTextBoxPosition = function(player_id, box_id, x, y)
@@ -586,22 +615,22 @@ function Displayer:_setupSubAPIs()
     end
 
     -- Font System API
-    self.Font.drawTextWithId = function(player_id, text, x, y, font_name, scale, z_order, display_id)
+    self.Font.drawTextWithId = function(player_id, text, x, y, font_name, scale, z_order, display_id, properties)
         local subsystem = mainInstance:_getSubsystem("FontSystem", "drawTextWithId")
         if not subsystem or not player_id or not text or not display_id then 
             print("Error: player_id, text and display_id are required")
             return nil 
         end
-        return subsystem:drawTextWithId(player_id, text, x or 0, y or 0, font_name or "THICK", scale or 2.0, z_order or 100, display_id)
+        return subsystem:drawTextWithId(player_id, text, x or 0, y or 0, font_name or "THICK", scale or 2.0, z_order or 100, display_id, properties)
     end
 
-    self.Font.drawText = function(player_id, text_id, text, x, y, z_order, font_name, scale)
+    self.Font.drawText = function(player_id, text_id, text, x, y, z_order, font_name, scale, properties)
         local subsystem = mainInstance:_getSubsystem("FontSystem", "drawText")
         if not subsystem or not player_id or not text then 
             print("Error: player_id and text are required")
             return nil 
         end
-        return subsystem:drawText(player_id, text_id, text, x or 0, y or 0, z_order or 100, font_name or "THICK", scale or 2.0)
+        return subsystem:drawText(player_id, text_id, text, x or 0, y or 0, z_order or 100, font_name or "THICK", scale or 2.0, properties)
     end
 
     self.Font.eraseTextDisplay = function(player_id, display_id)
@@ -623,13 +652,13 @@ function Displayer:_setupSubAPIs()
     end
 
     -- Scrolling Text List System API
-    self.ScrollingText.createList = function(player_id, list_id, x, y, width, height, config)
+    self.ScrollingText.createList = function(player_id, list_id, x, y, width, height, config, properties)
         local subsystem = mainInstance:_getSubsystem("ScrollingTextListSystem", "createScrollingList")
         if not subsystem or not player_id or not list_id then 
             print("Error: player_id and list_id are required")
             return nil 
         end
-        return subsystem:createScrollingList(player_id, list_id, x or 0, y or 0, width or 200, height or 100, config or {})
+        return subsystem:createScrollingList(player_id, list_id, x or 0, y or 0, width or 200, height or 100, config or {}, properties)
     end
 
     self.ScrollingText.addText = function(player_id, list_id, text)
@@ -696,7 +725,7 @@ function Displayer:_setupSubAPIs()
         return subsystem:removeScrollingList(player_id, list_id)
     end
 
-    self.ScrollingText.setPosition = function(player_id, list_id, x, y)
+    self.ScrollingText.setPosition = function(player_id, list_id, x, y, properties)
         local subsystem = mainInstance:_getSubsystem("ScrollingTextListSystem", "setListPosition")
         if not subsystem or not player_id or not list_id then 
             print("Error: player_id and list_id are required")
@@ -704,20 +733,20 @@ function Displayer:_setupSubAPIs()
         end
         x = x or 0
         y = y or 0
-        return subsystem:setListPosition(player_id, list_id, x, y)
+        return subsystem:setListPosition(player_id, list_id, x, y, properties)
     end
 
-      -- Scrolling Sprite List System API
+    -- Scrolling Sprite List System API
     self.ScrollingSprite = {}
-   -- Change it to this (swap player_id and list_id):
-function self.ScrollingSprite:createList(list_id, player_id, x, y, width, height, config)
-    local subsystem = mainInstance:_getSubsystem("ScrollingSpriteListSystem", "createScrollingList")
-    if not subsystem or not player_id or not list_id then 
-        print("Error: player_id and list_id are required")
-        return nil 
+    
+    function self.ScrollingSprite:createList(list_id, player_id, x, y, width, height, config, properties)
+        local subsystem = mainInstance:_getSubsystem("ScrollingSpriteListSystem", "createScrollingList")
+        if not subsystem or not player_id or not list_id then 
+            print("Error: player_id and list_id are required")
+            return nil 
+        end
+        return subsystem:createScrollingList(player_id, list_id, x or 0, y or 0, width or 200, height or 100, config or {}, properties)
     end
-    return subsystem:createScrollingList(player_id, list_id, x or 0, y or 0, width or 200, height or 100, config or {})
-end
 
     function self.ScrollingSprite:addSprite(player_id, list_id, sprite_def)
         local subsystem = mainInstance:_getSubsystem("ScrollingSpriteListSystem", "addSpriteToList")
@@ -783,7 +812,7 @@ end
         return subsystem:removeScrollingList(player_id, list_id)
     end
 
-    function self.ScrollingSprite:setPosition(player_id, list_id, x, y)
+    function self.ScrollingSprite:setPosition(player_id, list_id, x, y, properties)
         local subsystem = mainInstance:_getSubsystem("ScrollingSpriteListSystem", "setListPosition")
         if not subsystem or not player_id or not list_id then 
             print("Error: player_id and list_id are required")
@@ -791,7 +820,7 @@ end
         end
         x = x or 0
         y = y or 0
-        return subsystem:setListPosition(player_id, list_id, x, y)
+        return subsystem:setListPosition(player_id, list_id, x, y, properties)
     end
 end
 

@@ -2,6 +2,33 @@
 ScrollingTextList = {}
 ScrollingTextList.__index = ScrollingTextList
 
+local _mh_ok, _mh = pcall(require, "scripts/net-games/math-helpers")
+
+local function _merge_props(...)
+  local out = {}
+  for i = 1, select('#', ...) do
+    local p = select(i, ...)
+    if type(p) == "table" then
+      for k, v in pairs(p) do out[k] = v end
+    end
+  end
+  return out
+end
+
+local function _prepare_draw_params(base_params, properties)
+  if _mh_ok and _mh and _mh.prepare_draw_params then
+    return _mh.prepare_draw_params(base_params, properties or {})
+  end
+  -- fallback: shallow merge
+  local draw_params = {}
+  for k, v in pairs(base_params) do draw_params[k] = v end
+  if type(properties) == "table" then
+    for k, v in pairs(properties) do draw_params[k] = v end
+  end
+  return draw_params
+end
+
+
 function ScrollingTextList:init()
     self.player_lists = {}
     self.font_system = require("scripts/net-games/displayer/font-system")
@@ -59,7 +86,7 @@ function ScrollingTextList:cleanupPlayerLists(player_id)
     end
 end
 
-function ScrollingTextList:createScrollingList(player_id, list_id, x, y, width, height, config)
+function ScrollingTextList:createScrollingList(player_id, list_id, x, y, width, height, config, properties)
     config = config or {}
     
     local player_data = self.player_lists[player_id]
@@ -77,6 +104,7 @@ function ScrollingTextList:createScrollingList(player_id, list_id, x, y, width, 
     list_config.height = height or 100
     list_config.backdrop = config.backdrop
     list_config.texts = config.texts or {}
+    list_config.properties = properties or config.properties
     list_config.entry_states = {}
     list_config.current_state = self.states.waiting
     
@@ -100,19 +128,27 @@ function ScrollingTextList:createScrollingList(player_id, list_id, x, y, width, 
     end
     
     -- Initialize entry states
-    for i, text in ipairs(list_config.texts) do
-        list_config.entry_states[i] = {
-            text = text,
-            y_offset = 0,
-            state = "waiting", -- waiting, scrolling, finished
-            display_id = nil,  -- stable text_id used by FontSystem
-            was_visible = false,
-            start_delay = (i - 1) * list_config.entry_delay,
-            timer = 0
-        }
+for i, item in ipairs(list_config.texts) do
+    local entry_text = item
+    local entry_props = nil
 
-
+    -- Allow entries to be either plain strings or { text=..., properties={...} }
+    if type(item) == "table" then
+        entry_text = item.text or item[1] or ""
+        entry_props = item.properties
     end
+
+    list_config.entry_states[i] = {
+        text = entry_text,
+        properties = entry_props,
+        y_offset = 0,
+        state = "waiting", -- waiting, scrolling, finished
+        display_id = nil,  -- stable text_id used by FontSystem
+        was_visible = false,
+        start_delay = (i - 1) * list_config.entry_delay,
+        timer = 0
+    }
+end
     
     local list_data = {
         config = list_config,
@@ -144,18 +180,17 @@ end
 function ScrollingTextList:drawListBackdrop(player_id, list_id, config)
     local backdrop_id = list_id .. "_backdrop"
     
-    Net.player_draw_sprite(
-        player_id,
-        "backdrop",
-        {
-            id = backdrop_id,
-            x = config.backdrop.x,
-            y = config.backdrop.y,
-            z = config.z_order - 1,
-            sx = config.backdrop.width,
-            sy = config.backdrop.height
-        }
-    )
+local props = _merge_props(config.properties, config.backdrop and config.backdrop.properties or nil)
+local draw = _prepare_draw_params({
+    id = backdrop_id,
+    x = config.backdrop.x,
+    y = config.backdrop.y,
+    z = config.z_order - 1,
+    sx = config.backdrop.width,
+    sy = config.backdrop.height
+}, props)
+
+Net.player_draw_sprite(player_id, "backdrop", draw)
     
     return backdrop_id
 end
@@ -179,16 +214,18 @@ function ScrollingTextList:drawListEntry(player_id, list_id, entry_index, list_d
 
     if visible then
         -- Draw/update in place. This reuses the same character sprite ids under stable_id.
-        self.font_system:drawText(
-            player_id,
-            stable_id,
-            entry_state.text,
-            text_x,
-            text_y,
-            config.z_order,
-            config.font,
-            config.scale
-        )
+local props = _merge_props(config.properties, entry_state.properties)
+self.font_system:drawText(
+    player_id,
+    stable_id,
+    entry_state.text,
+    text_x,
+    text_y,
+    config.z_order,
+    config.font,
+    config.scale,
+    props
+)
         entry_state.was_visible = true
     else
         -- If it *was* visible and just went invisible, erase once.
@@ -480,7 +517,7 @@ function ScrollingTextList:removeScrollingList(player_id, list_id)
     player_data.active_lists[list_id] = nil
 end
 
-function ScrollingTextList:setListPosition(player_id, list_id, x, y)
+function ScrollingTextList:setListPosition(player_id, list_id, x, y, properties)
     local player_data = self.player_lists[player_id]
     if not player_data then return false end
     
@@ -492,6 +529,11 @@ function ScrollingTextList:setListPosition(player_id, list_id, x, y)
     -- Update position
     config.x = x
     config.y = y
+
+    -- Optional: update render properties (tint/rotation/opacity/etc)
+    if properties ~= nil then
+        config.properties = properties
+    end
     
     -- Update bounds if no backdrop
     if not config.backdrop then

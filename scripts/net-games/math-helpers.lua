@@ -76,13 +76,23 @@ local function prepare_draw_params(base_params, properties)
   if properties.b ~= nil then draw_params.b = clamp_color_value(properties.b) end
   
   -- Handle color mode (0=multiply, 1=add, 2=colorize)
+  -- Handle color mode (0=multiply, 1=add, 2=colorize)
   if properties.color_mode ~= nil then
-    local mode = tonumber(properties.color_mode)
+    local mode = properties.color_mode
+    -- Accept numeric modes or common string aliases
+    if type(mode) == "string" then
+      local m = string.lower(mode)
+      if m == "multiply" then mode = 0
+      elseif m == "add" or m == "additive" then mode = 1
+      elseif m == "colorize" then mode = 2
+      end
+    end
+    mode = tonumber(mode)
     if mode == 0 or mode == 1 or mode == 2 then
       draw_params.color_mode = mode
     end
   end
-  
+
   -- Animation state
   if properties.animation_state then draw_params.anim_state = properties.animation_state end
   if properties.anim_state then draw_params.anim_state = properties.anim_state end
@@ -94,3 +104,11 @@ local function prepare_draw_params(base_params, properties)
   
   return draw_params
 end
+
+return {
+  round_fraction = round_fraction,
+  convertOffsets = convertOffsets,
+  fixOffsets = fixOffsets,
+  clamp_color_value = clamp_color_value,
+  prepare_draw_params = prepare_draw_params
+}

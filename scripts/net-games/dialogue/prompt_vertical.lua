@@ -8,6 +8,16 @@ local Displayer  = require("scripts/net-games/displayer/displayer")
 local Input      = require("scripts/net-games/input/input")
 local FontSystem = require("scripts/net-games/displayer/font-system")
 
+
+-- Optional: merge rotation/tint/opacity/etc into sprite draw params
+local prepare_draw_params = nil
+pcall(function()
+  local mh = require("scripts/net-games/math-helpers")
+  if mh and mh.prepare_draw_params then
+    prepare_draw_params = mh.prepare_draw_params
+  end
+end)
+
 local MENUDBG = false
 local function mdbg(pid, msg)
   if not MENUDBG then return end
@@ -265,7 +275,7 @@ local function alloc_ui_sprites(inst)
 end
 
 
-local function draw_sprite(inst, sprite_id, draw_id, x, y, z, s, anim_state)
+local function draw_sprite(inst, sprite_id, draw_id, x, y, z, s, anim_state, properties)
   alloc_ui_sprites(inst)
 
   -- pixel-snap to avoid sub-pixel shimmer/jitter
@@ -283,10 +293,31 @@ local function draw_sprite(inst, sprite_id, draw_id, x, y, z, s, anim_state)
     opts.anim_state = anim_state
   end
 
+  local props = properties
+  if props == nil then props = inst.properties end
+
+  if type(props) == "table" then
+    -- allow x/y override (raw pixel coords in this module)
+    if props.x ~= nil then opts.x = props.x end
+    if props.y ~= nil then opts.y = props.y end
+    if props.X ~= nil then opts.x = props.X end
+    if props.Y ~= nil then opts.y = props.Y end
+
+    if prepare_draw_params then
+      opts = prepare_draw_params(opts, props) or opts
+    else
+      for k, v in pairs(props) do
+        if k ~= "x" and k ~= "y" and k ~= "X" and k ~= "Y" then
+          opts[k] = v
+        end
+      end
+    end
+  end
+
   Net.player_draw_sprite(inst.player_id, sprite_id, opts)
 end
 
-local function draw_sprite_xy(inst, sprite_id, draw_id, x, y, z, sx, sy, anim_state)
+local function draw_sprite_xy(inst, sprite_id, draw_id, x, y, z, sx, sy, anim_state, properties)
   alloc_ui_sprites(inst)
 
   -- pixel-snap to avoid sub-pixel shimmer/jitter
@@ -304,12 +335,32 @@ local function draw_sprite_xy(inst, sprite_id, draw_id, x, y, z, sx, sy, anim_st
     opts.anim_state = anim_state
   end
 
+  local props = properties
+  if props == nil then props = inst.properties end
+
+  if type(props) == "table" then
+    if props.x ~= nil then opts.x = props.x end
+    if props.y ~= nil then opts.y = props.y end
+    if props.X ~= nil then opts.x = props.X end
+    if props.Y ~= nil then opts.y = props.Y end
+
+    if prepare_draw_params then
+      opts = prepare_draw_params(opts, props) or opts
+    else
+      for k, v in pairs(props) do
+        if k ~= "x" and k ~= "y" and k ~= "X" and k ~= "Y" then
+          opts[k] = v
+        end
+      end
+    end
+  end
+
   Net.player_draw_sprite(inst.player_id, sprite_id, opts)
 end
 
 
 
-local function draw_menu_frame_overlay(inst, draw_id, x, y, z, s, anim_state, frame_cfg)
+local function draw_menu_frame_overlay(inst, draw_id, x, y, z, s, anim_state, frame_cfg, properties)
   if type(frame_cfg) ~= "table" then
     -- ensure no stale overlay is left behind
     Net.player_erase_sprite(inst.player_id, draw_id)
@@ -338,7 +389,27 @@ local function draw_menu_frame_overlay(inst, draw_id, x, y, z, s, anim_state, fr
     opts.anim_state = anim_state
   end
 
-  Net.player_draw_sprite(inst.player_id, inst.spr.MENU_FRAME, opts)
+  local props = properties
+if props == nil then props = inst.properties end
+
+if type(props) == "table" then
+  if props.x ~= nil then opts.x = props.x end
+  if props.y ~= nil then opts.y = props.y end
+  if props.X ~= nil then opts.x = props.X end
+  if props.Y ~= nil then opts.y = props.Y end
+
+  if prepare_draw_params then
+    opts = prepare_draw_params(opts, props) or opts
+  else
+    for k, v in pairs(props) do
+      if k ~= "x" and k ~= "y" and k ~= "X" and k ~= "Y" then
+        opts[k] = v
+      end
+    end
+  end
+end
+
+Net.player_draw_sprite(inst.player_id, inst.spr.MENU_FRAME, opts)
 end
 
 
@@ -515,6 +586,7 @@ function PromptMenuInstance:new(player_id, opts)
   o.box_id = (opts.ui and opts.ui.box_id) or mk_id(player_id)
   o.ui = normalize_ui(opts.ui or {})
   o.layout = normalize_layout(opts.layout or {})
+  o.properties = opts.properties or (o.layout and o.layout.properties) or nil
 
   -- Per-instance assets (prevents cross-NPC overwrites)
   o.assets = merge_assets(opts.assets)
@@ -645,8 +717,8 @@ function PromptMenuInstance:new(player_id, opts)
     -- Horizontal scroll state (selected row only)
     -- =========================================
 o._hscroll = {
-  active = false,      -- “we are currently animating”
-  overflow = false,    -- “selected row is too wide”
+  active = false,      -- we are currently animating
+  overflow = false,    -- selected row is too wide
   offset = 0,
   speed = 86,         -- px/sec
   gap = 32,            -- px gap in the loop
@@ -657,7 +729,7 @@ o._hscroll = {
   delay = 1.0,         -- the currently-active delay (initial or loop)
 
 
-  hold_t = 0,          -- how long we’ve hovered this item
+  hold_t = 0,          -- how long weve hovered this item
   key = nil,           -- used to detect selection/text changes
   loop_width = 0,
 }
@@ -1555,7 +1627,7 @@ clip_width = clip_width + (tonumber(L.text_clip_bonus_px) or 0)
         end
 
         -- Separate clip widths for ellipsis vs marquee
-        local glyph_px = char_w(L.font, scale, "0") -- one “char” in px at this font/scale
+        local glyph_px = char_w(L.font, scale, "0") -- one char in px at this font/scale
         local ellipsis_clip_px =
           effective_clip + (math.max(0, tonumber(L.text_clip_ellipsis_char_bonus) or 0) * glyph_px)
         local marquee_clip_px =
@@ -1779,7 +1851,7 @@ function PromptMenuInstance:become_ready()
     -- IMPORTANT:
     -- Do NOT restart the intro here.
     -- In your Pink flow, the menu opens while textbox types, so the intro already ran
-    -- when OPEN finished. become_ready() is just “unlock control / show overlays”.
+    -- when OPEN finished. become_ready() is just unlock control / show overlays.
     self:update_scroll_for_selection(true)
 
     -- Only redraw overlays; avoid forcing a full text redraw
@@ -2237,7 +2309,7 @@ end
 
   set_input_locked(player_id, true)
 
-  -- swallow interaction press so we don’t insta-confirm/select
+  -- swallow interaction press so we dont insta-confirm/select
   Input.consume(player_id)
 
   local inst = PromptMenuInstance:new(player_id, opts or {})

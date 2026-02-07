@@ -175,6 +175,12 @@ end)
 
 print("Tournament Manager loaded with Displayer API!")
 API Reference for External Users
+
+
+### Sprite draw properties (optional)
+Most draw/update/create calls that render sprites/text accept an optional trailing `properties` table.
+This table is forwarded to `Net.player_draw_sprite(...)` so you can set rotation/tint/opacity/etc (e.g. `ro`, `r/g/b`, `opacity`, `color_mode`, `ox/oy`, `sx/sy`).
+
 Initialization
 lua
 local Displayer = require("scripts/displayer/displayer")
@@ -190,26 +196,33 @@ Displayer.Timer.createPlayerCountdown(player_id, countdown_id, duration, callbac
 Displayer.TimerDisplay - Timer visualization
 
 lua
-Displayer.TimerDisplay.createGlobalTimerDisplay(timer_id, x, y, config_name)
-Displayer.TimerDisplay.createPlayerTimerDisplay(player_id, timer_id, x, y, config_name)
-Displayer.TimerDisplay.updateGlobalTimerDisplay(timer_id, value)
+Displayer.TimerDisplay.createGlobalTimerDisplay(timer_id, x, y, config_name, properties)
+Displayer.TimerDisplay.createPlayerTimerDisplay(player_id, timer_id, x, y, config_name, properties)
+Displayer.TimerDisplay.updateGlobalTimerDisplay(timer_id, value, properties)
 Displayer.Text - Text rendering
 
 lua
-Displayer.Text.drawText(player_id, text, x, y, font_name, scale, z_order)
-Displayer.Text.drawMarqueeText(player_id, marquee_id, text, y, font_name, scale, z_order, speed, backdrop)
-Displayer.Text.createTextBox(player_id, box_id, text, x, y, width, height, font_name, scale, z_order, backdrop_config, speed)
-Displayer.Text.updateText(player_id, text_id, new_text)
+Displayer.Text.drawText(player_id, text, x, y, font_name, scale, z_order, properties)
+Displayer.Text.drawMarqueeText(player_id, marquee_id, text, y, font_name, scale, z_order, speed, backdrop, properties)
+Displayer.Text.createTextBox(player_id, box_id, text, x, y, width, height, font_name, scale, z_order, backdrop_config, speed, opts, properties)
+Displayer.Text.updateText(player_id, text_id, new_text, properties)
 Displayer.ScrollingText - Scrolling lists
 
 lua
-Displayer.ScrollingText.createList(player_id, list_id, x, y, width, height, config)
+Displayer.ScrollingText.createList(player_id, list_id, x, y, width, height, config, properties)
+Displayer.ScrollingText.setPosition(player_id, list_id, x, y, properties)
 Displayer.ScrollingText.addText(player_id, list_id, text)
 Displayer.ScrollingText.removeList(player_id, list_id)
+
+Displayer.ScrollingSprite - Scrolling sprite lists
+
+lua
+Displayer.ScrollingSprite:createList(list_id, player_id, x, y, width, height, config, properties)
+Displayer.ScrollingSprite:setPosition(player_id, list_id, x, y, properties)
 Displayer.Font - Advanced font operations
 
 lua
-Displayer.Font.drawTextWithId(player_id, text, x, y, font_name, scale, z_order, display_id)
+Displayer.Font.drawTextWithId(player_id, text, x, y, font_name, scale, z_order, display_id, properties)
 Displayer.Font.getTextWidth(text, font_name, scale)
 Utility Functions
 lua

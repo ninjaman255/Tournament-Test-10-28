@@ -6,6 +6,16 @@ local Input      = require("scripts/net-games/input/input")
 local FontSystem = require("scripts/net-games/displayer/font-system")
 
 
+-- Optional: merge rotation/tint/opacity/etc into sprite draw params
+local prepare_draw_params = nil
+pcall(function()
+  local mh = require("scripts/net-games/math-helpers")
+  if mh and mh.prepare_draw_params then
+    prepare_draw_params = mh.prepare_draw_params
+  end
+end)
+
+
 local Prompt = {}
 Prompt.instances = {}
 Prompt._tick_attached = false
@@ -75,10 +85,10 @@ local function ensure_selector_cursor_allocated(player_id)
   })
 end
 
-local function selector_draw(player_id, draw_id, x, y, z, scale)
+local function selector_draw(player_id, draw_id, x, y, z, scale, properties)
   ensure_selector_cursor_allocated(player_id)
 
-  Net.player_draw_sprite(player_id, SELECTOR_SPRITE_ID, {
+  local opts = {
     id = draw_id,
     x = x,
     y = y,
@@ -86,7 +96,27 @@ local function selector_draw(player_id, draw_id, x, y, z, scale)
     sx = scale,
     sy = scale,
     anim_state = "CURSOR_RIGHT",
-  })
+  }
+
+  if type(properties) == "table" then
+    -- allow x/y override (raw pixel coords in this module)
+    if properties.x ~= nil then opts.x = properties.x end
+    if properties.y ~= nil then opts.y = properties.y end
+    if properties.X ~= nil then opts.x = properties.X end
+    if properties.Y ~= nil then opts.y = properties.Y end
+
+    if prepare_draw_params then
+      opts = prepare_draw_params(opts, properties) or opts
+    else
+      for k, v in pairs(properties) do
+        if k ~= "x" and k ~= "y" and k ~= "X" and k ~= "Y" then
+          opts[k] = v
+        end
+      end
+    end
+  end
+
+  Net.player_draw_sprite(player_id, SELECTOR_SPRITE_ID, opts)
 end
 
 local function selector_erase(player_id, draw_id)
@@ -112,6 +142,7 @@ local function normalize_ui(ui)
     mugshot  = ui.mugshot or nil,
     nameplate = ui.nameplate,
 
+    properties = ui.properties,
 
     typing_speed = ui.typing_speed or 99999,
     type_sfx_path = ui.type_sfx_path,
@@ -130,6 +161,7 @@ local function normalize_ui(ui)
   return o
 end
 
+
 --========================
 -- Text building (auto paginate, reserve options line)
 --========================
@@ -140,7 +172,7 @@ local function join_lines(lines)
 end
 
 local function build_yesno_text_from_wrapped(question_lines, _max_lines_per_page)
-  -- Locked “official” layout:
+  -- Locked official layout:
   -- line 1-2 = question text
   -- line 3   = "Yes    No"
   local MAX_LINES_PER_PAGE = 3
@@ -271,6 +303,7 @@ function PromptInstance:new(player_id, opts)
   o.ready_for_input = false
   o.selection = 1
   o.cursor_id = o.box_id .. "_selcursor"
+  o.cursor_properties = (opts and (opts.cursor_properties or (opts.ui and opts.ui.cursor_properties)))
   o.cursor_phase = 0
   o.cursor_base_x = nil
   o.cursor_base_y = nil
@@ -318,24 +351,26 @@ function PromptInstance:render_initial()
   }
 
   if Displayer.Text.create_text_box then
-    Displayer.Text.create_text_box(
-      player_id, tmp_box_id, question_only,
-      ui.x, ui.y, ui.w, ui.h,
-      ui.font, ui.scale, ui.z,
-      tmp_backdrop,
-      ui.typing_speed,
-      tmp_ops
-    )
-  else
-    Displayer.Text.createTextBox(
-      player_id, tmp_box_id, question_only,
-      ui.x, ui.y, ui.w, ui.h,
-      ui.font, ui.scale, ui.z,
-      tmp_backdrop,
-      ui.typing_speed,
-      tmp_ops
-    )
-  end
+      Displayer.Text.create_text_box(
+        player_id, self.box_id, text,
+        ui.x, ui.y, ui.w, ui.h,
+        ui.font, ui.scale, ui.z,
+        ui.backdrop,
+        ui.typing_speed,
+        ops,
+        ui.properties
+      )
+    else
+      Displayer.Text.createTextBox(
+        player_id, self.box_id, text,
+        ui.x, ui.y, ui.w, ui.h,
+        ui.font, ui.scale, ui.z,
+        ui.backdrop,
+        ui.typing_speed,
+        ops,
+        ui.properties
+      )
+    end
 
   local bd = Displayer.Text.getTextBoxData(player_id, tmp_box_id)
 
@@ -399,7 +434,8 @@ function PromptInstance:render_initial()
         ui.font, ui.scale, ui.z,
         ui.backdrop,
         ui.typing_speed,
-        ops
+        ops,
+        ui.properties
       )
     else
       Displayer.Text.resetTextBox(
@@ -408,7 +444,8 @@ function PromptInstance:render_initial()
         ui.font, ui.scale, ui.z,
         ui.backdrop,
         ui.typing_speed,
-        ops
+        ops,
+        ui.properties
       )
     end
   else
@@ -420,7 +457,8 @@ function PromptInstance:render_initial()
         ui.font, ui.scale, ui.z,
         ui.backdrop,
         ui.typing_speed,
-        ops
+        ops,
+        ui.properties
       )
     else
       Displayer.Text.createTextBox(
@@ -429,7 +467,8 @@ function PromptInstance:render_initial()
         ui.font, ui.scale, ui.z,
         ui.backdrop,
         ui.typing_speed,
-        ops
+        ops,
+        ui.properties
       )
     end
   end
@@ -446,7 +485,7 @@ function PromptInstance:render_cursor()
   self.cursor_base_y = cy
 
   -- draw once immediately (no erase needed every time)
-  selector_draw(player_id, self.cursor_id, cx, cy, ui.z + 2, ui.scale)
+  selector_draw(player_id, self.cursor_id, cx, cy, ui.z + 2, ui.scale, self.cursor_properties)
 end
 
 function PromptInstance:update(dt)
@@ -551,6 +590,8 @@ function PromptInstance:update(dt)
         self.cursor_base_y,
         (self.ui.z or 100) + 2,
         self.ui.scale or 2.0
+      ,
+        self.cursor_properties
       )
     end
   end

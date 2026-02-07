@@ -168,6 +168,14 @@ local function build_ui(cfg, bot_name, opts)
     end
   end
 
+
+  -- Optional sprite properties passthrough (rotation/tint/opacity/etc)
+  -- Authors can set cfg.properties as a convenience (merged into ui.properties).
+  if cfg.properties and type(cfg.properties) == "table" then
+    ui.properties = ui.properties or {}
+    deep_merge(ui.properties, cfg.properties)
+  end
+
   return ui
 end
 
@@ -277,6 +285,7 @@ function Talk.start(player_id, script, cfg, bot_name, extra_opts)
   local lines = normalize_script(script)
 
   local o = {
+    properties = cfg.properties,
     page_advance = cfg.page_advance or "wait_for_confirm",
     confirm_during_typing = (cfg.confirm_during_typing ~= false),
     cancel_behavior = cfg.cancel_behavior or "battle_network",

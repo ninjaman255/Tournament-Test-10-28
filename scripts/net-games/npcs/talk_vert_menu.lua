@@ -112,6 +112,10 @@ local function reset_box_text(player_id, box_id, ui, text, indicator_enabled)
     set_textbox_indicator(ui, indicator_enabled)
   end
 
+
+  -- Optional sprite properties passthrough (rotation/tint/opacity/etc)
+  local props = (ui and ui.properties) or nil
+
   if Displayer.Text.reset_text_box then
     Displayer.Text.reset_text_box(
       player_id, box_id, text,
@@ -120,7 +124,9 @@ local function reset_box_text(player_id, box_id, ui, text, indicator_enabled)
       ui.backdrop,
       ui.typing_speed or 12,
       ops
-    )
+    ,
+        props
+      )
   else
     Displayer.Text:resetTextBox(
       player_id, box_id, text,
@@ -129,7 +135,9 @@ local function reset_box_text(player_id, box_id, ui, text, indicator_enabled)
       ui.backdrop,
       ui.typing_speed or 12,
       ops
-    )
+    ,
+        props
+      )
   end
 end
 
@@ -492,6 +500,7 @@ function TalkVertMenu.open(player_id, bot_name, talk_cfg, menu_cfg)
   local layout = apply_default_layout_frame(talk_cfg, menu_cfg.layout or {})
 
   PromptVertical.menu(player_id, {
+    properties = (ui and ui.properties) or (talk_cfg and talk_cfg.properties) or nil,
     reuse_existing_box = true,
     keep_textbox = true,
 

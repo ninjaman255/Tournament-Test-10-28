@@ -14,6 +14,22 @@ Goals:
 ]]--
 
 -- ============================================================
+-- Dependencies: Sprite Management System
+-- ============================================================
+local SpriteManager_ok, SpriteManager = pcall(require, "scripts/net-games/sprites-api/sprite-manager")
+local SpriteConstants_ok, SpriteConstants = pcall(require, "scripts/net-games/sprites-api/sprite-constants")
+
+if not SpriteManager_ok then
+    print("[net-games][framework] WARNING: SpriteManager not available. Falling back to legacy sprite handling.")
+    SpriteManager = nil
+end
+
+if not SpriteConstants_ok then
+    print("[net-games][framework] WARNING: SpriteConstants not available.")
+    SpriteConstants = nil
+end
+
+-- ============================================================
 -- Optional Displayer init (tournament uses Displayer heavily, but don't hard crash)
 -- ============================================================
 local Displayer_ok, Displayer = pcall(require, "scripts/net-games/displayer/displayer")
@@ -50,11 +66,11 @@ local frame = {}
 local last_position_cache = {} -- tracks player's last known area
 local button_states = {}       -- latest button states
 local tracking_state = {}      -- hold-to-repeat tracker for state=2 buttons
-local cosmetic_cache = {}      -- cosmetics per player
-local cursor_cache = {}        -- cursor config per player
+local cosmetic_cache = {}      -- cosmetics per player (stores bot IDs and offsets)
+local cursor_cache = {}        -- cursor config per player (now stores SpriteManager obj_ids)
 local avatar_cache = {}        -- reserved (used by some forks)
-local ui_cache = {}            -- ui elements per player
 local map_elements = {}        -- map elements per player
+local ui_cache = {}
 local ui_update = {}           -- reserved for future sliding UI
 local online_players = {}      -- list of online players (for exclusions)
 
@@ -62,6 +78,26 @@ local online_players = {}      -- list of online players (for exclusions)
 -- Net.player_draw_sprite can be "sticky" across sprite_id reuse in some forks.
 -- If you really want old behavior, set to true.
 local REUSE_SPRITES_BY_TEXTURE = false
+
+-- ============================================================
+-- Sprite Management Wrappers
+-- ============================================================
+local function get_sprite_manager(player_id)
+    if SpriteManager then
+        return SpriteManager.get_player_manager(player_id)
+    end
+    return nil
+end
+
+local function safe_sprite_operation(player_id, operation, ...)
+    if SpriteManager then
+        local manager = get_sprite_manager(player_id)
+        if manager and manager[operation] then
+            return manager[operation](manager, ...)
+        end
+    end
+    return false
+end
 
 -- ============================================================
 -- Async helpers
@@ -108,6 +144,62 @@ local function fixOffsets(a, b)
   return a_int + a_dec, b_int + b_dec
 end
 
+-- ============================================================
+-- Properties helpers (Sprite API draw/update options)
+-- ============================================================
+local prepare_draw_params = nil
+do
+  local ok, mh = pcall(require, "scripts/net-games/math-helpers")
+  if ok and type(mh) == "table" and type(mh.prepare_draw_params) == "function" then
+    prepare_draw_params = mh.prepare_draw_params
+  end
+end
+
+local function _copy_table(t)
+  local o = {}
+  if t then
+    for k, v in pairs(t) do o[k] = v end
+  end
+  return o
+end
+
+local function _merge_tables(a, b)
+  local out = _copy_table(a)
+  if b then
+    for k, v in pairs(b) do out[k] = v end
+  end
+  return out
+end
+
+-- Copy properties, but if x/y are present, replace them with scaled values (so callers can supply unscaled x/y)
+local function _with_scaled_xy(properties, x_scaled, y_scaled)
+  if not properties then return nil end
+  local p = _copy_table(properties)
+  if properties.x ~= nil then p.x = x_scaled end
+  if properties.y ~= nil then p.y = y_scaled end
+  return p
+end
+
+-- For framework-style coordinates (call sites already do X*2, Y*2)
+local function _resolve_xy_scaled(X, Y, properties)
+  local rawX, rawY = X, Y
+  if properties then
+    if properties.x ~= nil then rawX = properties.x end
+    if properties.y ~= nil then rawY = properties.y end
+  end
+  return rawX, rawY, rawX * 2, rawY * 2
+end
+
+-- For cosmetic-style coordinates (x/y are offset by +120/+80 and then *2)
+local function _resolve_xy_scaled_with_offsets(x, y, offX, offY, properties)
+  local rawX, rawY = x, y
+  if properties then
+    if properties.x ~= nil then rawX = properties.x end
+    if properties.y ~= nil then rawY = properties.y end
+  end
+  return rawX, rawY, (rawX + offX) * 2, (rawY + offY) * 2
+end
+
 local function table_has_value(tab, val)
   for _, value in ipairs(tab) do
     if value == val then return true end
@@ -130,7 +222,6 @@ local function provide_framework_assets(player_id)
   -- Some assets won't load reliably unless provided on join.
   pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts/fonts_compressed.png") end)
   pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts/fonts_dark_compressed.png") end)
-
   pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts/fonts_wide.animation") end)
   pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts/fonts_gradient.animation") end)
   pcall(function() Net.provide_asset_for_player(player_id, "/server/assets/net-games/fonts/fonts_thick.animation") end)
@@ -202,9 +293,9 @@ function frame.animate_frozen_player(player_id, anim_state)
 end
 
 -- ============================================================
--- Cosmetics
+-- Cosmetics (uses bots + legacy sprite system)
 -- ============================================================
-function frame.set_cosmetic(cosmetic_id, player_id, texture, animation, state, x, y, visible, player_xoffset, player_yoffset)
+function frame.set_cosmetic(cosmetic_id, player_id, texture, animation, state, x, y, visible, player_xoffset, player_yoffset, properties)
   return async(function()
     if cosmetic_id == nil or player_id == nil or texture == nil or animation == nil or state == nil or x == nil or y == nil then
       print("[net-games][framework] set_cosmetic(): missing required arguments")
@@ -225,49 +316,93 @@ function frame.set_cosmetic(cosmetic_id, player_id, texture, animation, state, x
     pcall(function() Net.provide_asset_for_player(player_id, texture) end)
     pcall(function() Net.provide_asset_for_player(player_id, animation) end)
 
-    Net.player_alloc_sprite(player_id, cosmetic_id, { texture_path = texture, anim_path = animation, anim_state = state })
+    -- Use SpriteManager if available, otherwise legacy system
+    if SpriteManager then
+        local manager = get_sprite_manager(player_id)
+        if manager then
+            -- Use cosmetic_id as sprite_id
+            manager:strict_alloc_sprite(cosmetic_id, {
+                texture_path = texture,
+                anim_path = animation,
+                anim_state = state
+            })
+        else
+            Net.player_alloc_sprite(player_id, cosmetic_id, { texture_path = texture, anim_path = animation, anim_state = state })
+        end
+    else
+        Net.player_alloc_sprite(player_id, cosmetic_id, { texture_path = texture, anim_path = animation, anim_state = state })
+    end
     
-    local draw_params = {
-      id = cosmetic_id .. "_obj",
-      x = (x + 120 + p_xoffset) * 2,
-      y = (y + 80 + p_yoffset) * 2,
-      sx = 2,
-      sy = 2,
-      anim_state = state
-    }
+    local rawX, rawY, drawX, drawY = _resolve_xy_scaled_with_offsets(x, y, 120 + p_xoffset, 80 + p_yoffset, properties)
     
-    Net.player_draw_sprite(player_id, cosmetic_id, draw_params)
+    -- Draw using SpriteManager or legacy
+    if SpriteManager then
+        local manager = get_sprite_manager(player_id)
+        if manager then
+            local draw_params = {
+                x = drawX,
+                y = drawY,
+                sx = 2,
+                sy = 2,
+                anim_state = state
+            }
+            
+            if prepare_draw_params then
+                draw_params = prepare_draw_params(draw_params, _with_scaled_xy(properties, drawX, drawY))
+            end
+            
+            local obj_id = cosmetic_id .. "_obj"
+            manager:draw_sprite(cosmetic_id, obj_id, draw_params)
+        end
+    else
+        local draw_params = {
+            id = cosmetic_id .. "_obj",
+            x = drawX,
+            y = drawY,
+            sx = 2,
+            sy = 2,
+            anim_state = state
+        }
+        
+        if prepare_draw_params then
+            draw_params = prepare_draw_params(draw_params, _with_scaled_xy(properties, drawX, drawY))
+        end
+        
+        Net.player_draw_sprite(player_id, cosmetic_id, draw_params)
+    end
 
     last_position_cache[player_id] = last_position_cache[player_id] or {}
     local area_id = last_position_cache[player_id].area or Net.get_player_area(player_id)
 
     local position = Net.get_player_position(player_id)
-    local xoffset, yoffset = convertOffsets(x * -1, y * -1, position.z + 3)
+    local xoffset, yoffset = convertOffsets(rawX * -1, rawY * -1, position.z + 3)
     xoffset, yoffset = fixOffsets(xoffset, yoffset)
 
     cosmetic_cache[player_id][cosmetic_id] = {
-      id = cosmetic_id,
-      texture = texture,
-      x = xoffset,
-      y = yoffset,
-      visibility = visibility,
-      animation = animation,
-      state = state,
-      spritex = (x + 120 + p_xoffset) * 2,
-      spritey = (y + 80 + p_yoffset) * 2
+        id = cosmetic_id,
+        texture = texture,
+        x = xoffset,
+        y = yoffset,
+        visibility = visibility,
+        animation = animation,
+        state = state,
+        spritex = drawX,
+        spritey = drawY,
+        -- Store whether we used SpriteManager
+        uses_sprite_manager = SpriteManager ~= nil
     }
 
     local bot_id = cosmetic_id .. "_" .. player_id
     Net.create_bot(bot_id, {
-      area_id = area_id,
-      warp_in = false,
-      texture_path = texture,
-      animation_path = animation,
-      animation = state,
-      x = position.x + xoffset,
-      y = position.y + yoffset,
-      z = position.z + 3,
-      solid = false
+        area_id = area_id,
+        warp_in = false,
+        texture_path = texture,
+        animation_path = animation,
+        animation = state,
+        x = position.x + xoffset,
+        y = position.y + yoffset,
+        z = position.z + 3,
+        solid = false
     })
 
     -- Hide bot from owning player (they see the cosmetic via player sprite)
@@ -275,7 +410,7 @@ function frame.set_cosmetic(cosmetic_id, player_id, texture, animation, state, x
 
     -- If visibility=false, hide from everyone else too
     if not visibility then
-      exclude_except_for(player_id, bot_id)
+        exclude_except_for(player_id, bot_id)
     end
 
     return true
@@ -293,13 +428,23 @@ function frame.remove_cosmetic(cosmetic_id, player_id)
     Net.remove_bot(bot_id, false)
   end
 
-  Net.player_erase_sprite(player_id, cosmetic_id .. "_obj")
+  -- Erase using SpriteManager or legacy
+  local cosmetic_data = cosmetic_cache[player_id][cosmetic_id]
+  if cosmetic_data.uses_sprite_manager and SpriteManager then
+    local manager = get_sprite_manager(player_id)
+    if manager then
+        manager:erase_sprite(cosmetic_id .. "_obj")
+    end
+  else
+    Net.player_erase_sprite(player_id, cosmetic_id .. "_obj")
+  end
+  
   cosmetic_cache[player_id][cosmetic_id] = nil
   return true
 end
 
 -- ============================================================
--- Map elements (bots)
+-- Map elements (bots) - unchanged
 -- ============================================================
 function frame.add_map_element(name, player_id, texture, animation, animation_state, X, Y, Z, exclude)
   local area_id = (last_position_cache[player_id] and last_position_cache[player_id].area) or Net.get_player_area(player_id)
@@ -311,7 +456,7 @@ function frame.add_map_element(name, player_id, texture, animation, animation_st
     texture_path = texture,
     animation_path = animation,
     animation = animation_state,
-    x = X, y = Y, z = Z,
+    x = rawX, y = rawY, z = Z,
     solid = false
   })
 
@@ -366,232 +511,436 @@ function frame.remove_map_element(name, player_id)
   end
   return false
 end
-
 -- ============================================================
--- UI elements (screen-space sprites)
+-- UI elements (screen-space sprites) - Properties-based API
 -- ============================================================
-function frame.add_ui_element(sprite_id, player_id, texture_path, animation_path, animation_state, X, Y, Z, ScaleX, ScaleY, properties)
-  local scaleX = (ScaleX ~= nil and ScaleX >= 0.0) and ScaleX or 2.0
-  local scaleY = (ScaleY ~= nil and ScaleY >= 0.0) and ScaleY or 2.0
+function frame.add_ui_element(sprite_id, player_id, texture_path, animation_path, animation_state, properties)
+  -- Validate parameters
+  if not sprite_id or not player_id or not texture_path then
+    print("[net-games][framework] add_ui_element(): missing required arguments")
+    return false
+  end
+  
+  properties = properties or {}
+  
+  -- Extract values from properties
+  local xPos = properties.x or 0
+  local yPos = properties.y or 0
+  local zPos = properties.z or 0
+  local scaleX = properties.sx or properties.scale or 2.0
+  local scaleY = properties.sy or properties.scale or 2.0
   animation_path = animation_path or ""
   animation_state = animation_state or ""
 
-  ui_cache[player_id] = ui_cache[player_id] or {}
+  -- Use SpriteManager if available
+  if SpriteManager then
+    local manager = get_sprite_manager(player_id)
+    if manager then
+        local alloc_id = tostring(sprite_id)
+        
+        -- Provide assets
+        if animation_path ~= "" then 
+            pcall(function() Net.provide_asset_for_player(player_id, animation_path) end) 
+        end
+        pcall(function() Net.provide_asset_for_player(player_id, texture_path) end)
 
-  -- Allocation ids must be unique per texture/anim, otherwise Net ignores re-allocs
-  -- and you'll get stale visuals (exactly your tourney bracket issue).
+        -- Allocate sprite if not already allocated
+        if not manager:is_sprite_allocated(alloc_id) then
+            manager:strict_alloc_sprite(alloc_id, {
+                texture_path = texture_path,
+                anim_path = animation_path,
+                anim_state = animation_state
+            })
+        end
+        
+        -- Prepare draw parameters
+        local rawX, rawY, drawX, drawY = _resolve_xy_scaled(xPos, yPos, properties)
+        
+        local draw_params = {
+            x = drawX,
+            y = drawY,
+            sx = scaleX,
+            sy = scaleY
+        }
+        
+        -- Add other properties from the properties table
+        for k, v in pairs(properties) do
+            if k ~= "x" and k ~= "y" then  -- x and y are already handled
+                if k == "z" then
+                    draw_params.z = v
+                elseif k == "rotation" or k == "ro" then
+                    draw_params.ro = v
+                elseif k == "opacity" or k == "a" then
+                    draw_params.opacity = v
+                    draw_params.a = v
+                elseif k == "sx" or k == "sy" or k == "scale" then
+                    -- Already handled above
+                elseif k == "anim_state" or k == "animation_state" then
+                    draw_params.anim_state = v
+                elseif k == "r" or k == "g" or k == "b" then
+                    draw_params[k] = v
+                elseif k == "color_mode" then
+                    draw_params.color_mode = v
+                elseif k == "ox" or k == "oy" then
+                    draw_params[k] = v
+                else
+                    draw_params[k] = v
+                end
+            end
+        end
+        
+        -- Ensure animation state is set
+        if animation_state and animation_state ~= "" and not draw_params.anim_state then
+            draw_params.anim_state = animation_state
+        end
+        
+        -- Apply prepare_draw_params if available
+        if prepare_draw_params then
+            draw_params = prepare_draw_params(draw_params, _with_scaled_xy(properties, drawX, drawY))
+        end
+        
+        -- Create object ID
+        local obj_id = sprite_id .. "_obj"
+        manager:draw_sprite(alloc_id, obj_id, draw_params)
+        
+        -- Store in cache
+        ui_cache[player_id] = ui_cache[player_id] or {}
+        ui_cache[player_id][sprite_id] = {
+            alloc_id = alloc_id,
+            obj_id = obj_id,
+            texture_path = texture_path,
+            rawX = xPos,
+            rawY = yPos,
+            drawX = drawX,
+            drawY = drawY,
+            z = zPos,
+            scaleX = scaleX,
+            scaleY = scaleY,
+            animation_state = animation_state,
+            uses_sprite_manager = true
+        }
+        
+        return true
+    end
+  end
+  
+  -- Fallback: use direct Net API
   local alloc_id = tostring(sprite_id) .. "|" .. tostring(texture_path) .. "|" .. tostring(animation_path or "")
 
-  -- Always provide assets (safe) before alloc
   if animation_path ~= "" then pcall(function() Net.provide_asset_for_player(player_id, animation_path) end) end
   pcall(function() Net.provide_asset_for_player(player_id, texture_path) end)
 
-  -- Allocate sprite (safe even if alloc_id matches prior; Net tends to ignore duplicates)
-  Net.player_alloc_sprite(player_id, alloc_id, { texture_path = texture_path, anim_path = animation_path, anim_state = animation_state })
-  -- Draw under the requested draw id (separate from alloc_id)
+  Net.player_alloc_sprite(player_id, alloc_id, { 
+      texture_path = texture_path, 
+      anim_path = animation_path, 
+      anim_state = animation_state 
+  })
+  
+  local rawX, rawY, drawX, drawY = _resolve_xy_scaled(xPos, yPos, properties)
+
   local draw_params = {
     id = sprite_id .. "_obj",
-    x = X * 2,
-    y = Y * 2,
+    x = drawX,
+    y = drawY,
     sx = scaleX,
     sy = scaleY
   }
   
-  if Z then draw_params.z = Z end
-  if animation_state and animation_state ~= "" then draw_params.anim_state = animation_state end
+  -- Add properties to draw params
+  for k, v in pairs(properties) do
+    if k ~= "x" and k ~= "y" then
+      if k == "z" then
+        draw_params.z = v
+      elseif k == "rotation" or k == "ro" then
+        draw_params.ro = v
+      elseif k == "opacity" or k == "a" then
+        draw_params.opacity = v
+        draw_params.a = v
+      elseif k == "anim_state" or k == "animation_state" then
+        draw_params.anim_state = v
+      elseif k == "r" or k == "g" or k == "b" then
+        draw_params[k] = v
+      elseif k == "color_mode" then
+        draw_params.color_mode = v
+      elseif k == "ox" or k == "oy" then
+        draw_params[k] = v
+      else
+        draw_params[k] = v
+      end
+    end
+  end
+  
+  if prepare_draw_params then
+    draw_params = prepare_draw_params(draw_params, _with_scaled_xy(properties, drawX, drawY))
+  end
   
   Net.player_draw_sprite(player_id, alloc_id, draw_params)
-
-  ui_cache[player_id][sprite_id] = {
-    texture_path = texture_path,
-    alloc_id = alloc_id,
-    sprite_id = sprite_id,
-    x = X, y = Y,
-    scaleX = scaleX, scaleY = scaleY,
-    animation_state = animation_state
-  }
   
-  if Z then ui_cache[player_id][sprite_id].z = Z end
+  -- Store in cache
+  ui_cache[player_id] = ui_cache[player_id] or {}
+  ui_cache[player_id][sprite_id] = {
+    alloc_id = alloc_id,
+    obj_id = sprite_id .. "_obj",
+    texture_path = texture_path,
+    rawX = xPos,
+    rawY = yPos,
+    drawX = drawX,
+    drawY = drawY,
+    z = zPos,
+    scaleX = scaleX,
+    scaleY = scaleY,
+    animation_state = animation_state,
+    uses_sprite_manager = false
+  }
 
   return true
 end
 
 function frame.update_ui_element(sprite_id, player_id, properties)
-  if not (ui_cache[player_id] and ui_cache[player_id][sprite_id]) then return false end
+  if not ui_cache[player_id] or not ui_cache[player_id][sprite_id] then
+    print("[net-games][framework] update_ui_element(): UI element not found: " .. tostring(sprite_id))
+    return false
+  end
+  
   local element = ui_cache[player_id][sprite_id]
-
-  local draw = { id = sprite_id .. "_obj" }
-
-  if properties.x then draw.x = properties.x; element.x = properties.x end
-  if properties.y then draw.y = properties.y; element.y = properties.y end
-  if properties.z then draw.z = properties.z; element.z = properties.z end
-  if properties.ox then draw.ox = properties.ox; element.ox = properties.ox end
-  if properties.oy then draw.oy = properties.oy; element.oy = properties.oy end
-
-  if properties.scale then
-    draw.sx = properties.scale
-    draw.sy = properties.scale
-    element.sx = properties.scale
-    element.sy = properties.scale
-  elseif properties.sx then
-    draw.sx = properties.sx
-    element.sx = properties.sx
-  elseif properties.sy then
-    draw.sy = properties.sy
-    element.sy = properties.sy
-  end
-
-  if properties.rotation or properties.ro then
-    local rotation = properties.rotation or properties.ro
-    draw.ro = rotation
-    element.rotation = rotation
-  end
-
-  if properties.opacity then
-    local opacity = properties.opacity
-    draw.opacity = opacity
-    element.opacity = opacity
-  end
-
-  if properties.a then
-    local a = properties.a
-    draw.a = properties.a
-    element.a = properties.a
-  end
-
-  if properties.animation_state then
-    draw.anim_state = properties.animation_state
-    element.animation_state = properties.animation_state
-  end
-
-  if properties.r then
-    draw.r = properties.r 
-    element.r = properties.r 
+  properties = properties or {}
+  
+  -- Handle with SpriteManager
+  if element.uses_sprite_manager and SpriteManager then
+    local manager = get_sprite_manager(player_id)
+    if manager then
+        local obj_id = element.obj_id
+        
+        if not manager:object_exists(obj_id) then
+            print("[net-games][framework] update_ui_element(): Object not found in SpriteManager: " .. obj_id)
+            return false
+        end
+        
+        -- Get current properties
+        local current_props = manager:get_properties(obj_id) or {}
+        local draw_props = {}
+        
+        -- Copy existing properties
+        for k, v in pairs(current_props) do
+            if k ~= "id" then
+                draw_props[k] = v
+            end
+        end
+        
+        -- Update with new properties
+        for k, v in pairs(properties) do
+            if k == "x" or k == "y" then
+                -- Update position
+                if k == "x" then
+                    local _, _, drawX, _ = _resolve_xy_scaled(v, element.rawY, properties)
+                    draw_props.x = drawX
+                    element.rawX = v
+                    element.drawX = drawX
+                else
+                    local _, _, _, drawY = _resolve_xy_scaled(element.rawX, v, properties)
+                    draw_props.y = drawY
+                    element.rawY = v
+                    element.drawY = drawY
+                end
+            elseif k == "sx" or k == "scaleX" then
+                draw_props.sx = v
+                element.scaleX = v
+            elseif k == "sy" or k == "scaleY" then
+                draw_props.sy = v
+                element.scaleY = v
+            elseif k == "scale" then
+                draw_props.sx = v
+                draw_props.sy = v
+                element.scaleX = v
+                element.scaleY = v
+            elseif k == "rotation" or k == "ro" then
+                draw_props.ro = v
+                element.rotation = v
+            elseif k == "opacity" or k == "a" then
+                draw_props.opacity = v
+                draw_props.a = v
+                element.opacity = v
+            elseif k == "anim_state" or k == "animation_state" then
+                draw_props.anim_state = v
+                element.animation_state = v
+            elseif k == "z" then
+                draw_props.z = v
+                element.z = v
+            elseif k == "r" or k == "g" or k == "b" then
+                draw_props[k] = v
+                element[k] = v
+            elseif k == "color_mode" then
+                draw_props.color_mode = v
+                element.color_mode = v
+            elseif k == "ox" or k == "oy" then
+                draw_props[k] = v
+                element[k] = v
+            else
+                draw_props[k] = v
+                element[k] = v
+            end
+        end
+        
+        return manager:set_properties(obj_id, draw_props, true)
+    end
+  else
+    -- Legacy update
+    local alloc_id = element.alloc_id
+    local obj_id = element.obj_id
+    
+    -- Update cache
+    if properties.x then element.rawX = properties.x end
+    if properties.y then element.rawY = properties.y end
+    
+    local rawX = properties.x or element.rawX or 0
+    local rawY = properties.y or element.rawY or 0
+    local _, _, drawX, drawY = _resolve_xy_scaled(rawX, rawY, properties)
+    element.drawX = drawX
+    element.drawY = drawY
+    
+    local draw_params = {
+        id = obj_id,
+        x = drawX,
+        y = drawY
+    }
+    
+    -- Update other properties
+    for k, v in pairs(properties) do
+        if k ~= "x" and k ~= "y" then
+            if k == "sx" or k == "scaleX" then
+                draw_params.sx = v
+                element.scaleX = v
+            elseif k == "sy" or k == "scaleY" then
+                draw_params.sy = v
+                element.scaleY = v
+            elseif k == "scale" then
+                draw_params.sx = v
+                draw_params.sy = v
+                element.scaleX = v
+                element.scaleY = v
+            elseif k == "rotation" or k == "ro" then
+                draw_params.ro = v
+                element.rotation = v
+            elseif k == "opacity" or k == "a" then
+                draw_params.opacity = v
+                draw_params.a = v
+                element.opacity = v
+            elseif k == "anim_state" or k == "animation_state" then
+                draw_params.anim_state = v
+                element.animation_state = v
+            elseif k == "z" then
+                draw_params.z = v
+                element.z = v
+            elseif k == "r" or k == "g" or k == "b" then
+                draw_params[k] = v
+                element[k] = v
+            elseif k == "color_mode" then
+                draw_params.color_mode = v
+                element.color_mode = v
+            elseif k == "ox" or k == "oy" then
+                draw_params[k] = v
+                element[k] = v
+            else
+                draw_params[k] = v
+                element[k] = v
+            end
+        end
+    end
+    
+    if prepare_draw_params then
+        draw_params = prepare_draw_params(draw_params, _with_scaled_xy(properties, drawX, drawY))
+    end
+    
+    Net.player_draw_sprite(player_id, alloc_id, draw_params)
+    return true
   end
   
-  if properties.g then 
-    draw.g = properties.g
-    element.g = properties.g 
-  end
-  
-  if properties.b then
-    draw.b = properties.b
-    element.b = properties.b 
-  end
-  
-  if properties.color_mode then 
-    draw.color_mode = properties.color_mode 
-    element.color_mode = properties.color_mode 
-  end
-
-  Net.player_draw_sprite(player_id, element.alloc_id, draw)
-  return true
+  return false
 end
 
-function frame.set_ui_animation(sprite_id, player_id, animation_state)
-  if not (ui_cache[player_id] and ui_cache[player_id][sprite_id]) then return false end
-  local element = ui_cache[player_id][sprite_id]
-  element.animation_state = animation_state
-  Net.player_draw_sprite(player_id, element.alloc_id, { 
-    id = sprite_id .. "_obj", 
-    anim_state = animation_state 
-  })
-  return true
+function frame.set_ui_animation(sprite_id, player_id, animation_state, properties)
+  local props = properties or {}
+  props.anim_state = animation_state
+  return frame.update_ui_element(sprite_id, player_id, props)
 end
 
-function frame.move_ui_element(sprite_id, player_id, X, Y, Z)
-  if not (ui_cache[player_id] and ui_cache[player_id][sprite_id]) then return false end
-  local element = ui_cache[player_id][sprite_id]
-  element.x, element.y, element.z = X, Y, Z
-  Net.player_draw_sprite(player_id, element.alloc_id, { 
-    id = sprite_id .. "_obj", 
-    x = X * 2, 
-    y = Y * 2, 
-    z = Z 
-  })
-  return true
+function frame.move_ui_element(sprite_id, player_id, properties)
+  return frame.update_ui_element(sprite_id, player_id, properties)
 end
 
-function frame.update_ui_position(sprite_id, player_id, X, Y, Z)
-  if not (ui_cache[player_id] and ui_cache[player_id][sprite_id]) then return false end
-  local element = ui_cache[player_id][sprite_id]
-  element.x = X
-  element.y = Y
-  element.z = Z or element.z
-
-  local draw_params = {
-    id = sprite_id .. "_obj",
-    x = X * 2,
-    y = Y * 2,
-    sx = element.scaleX,
-    sy = element.scaleY,
-    anim_state = element.animation_state
-  }
-  
-  if element.z then draw_params.z = element.z end
-  if element.rotation then draw_params.ro = element.rotation end
-  if element.opacity then 
-    draw_params.opacity = element.opacity
-    draw_params.a = element.opacity
-  end
-  if element.r then draw_params.r = element.r end
-  if element.g then draw_params.g = element.g end
-  if element.b then draw_params.b = element.b end
-  if element.color_mode then draw_params.color_mode = element.color_mode end
-  if element.ox then draw_params.ox = element.ox end
-  if element.oy then draw_params.oy = element.oy end
-
-  Net.player_draw_sprite(player_id, element.alloc_id, draw_params)
-  return true
+function frame.update_ui_position(sprite_id, player_id, properties)
+  return frame.update_ui_element(sprite_id, player_id, properties)
 end
 
 function frame.remove_ui_element(sprite_id, player_id)
-  if ui_cache[player_id] then ui_cache[player_id][sprite_id] = nil end
-  Net.player_erase_sprite(player_id, sprite_id .. "_obj")
+  -- Check if we have this UI element in cache
+  if not ui_cache[player_id] or not ui_cache[player_id][sprite_id] then
+    print("[net-games][framework] remove_ui_element(): UI element not found: " .. tostring(sprite_id))
+    return false
+  end
+  
+  local element = ui_cache[player_id][sprite_id]
+  
+  -- Handle with SpriteManager
+  if element.uses_sprite_manager and SpriteManager then
+    local manager = get_sprite_manager(player_id)
+    if manager then
+        local obj_id = element.obj_id
+        if manager:object_exists(obj_id) then
+            manager:erase_sprite(obj_id)
+        end
+    end
+  else
+    -- Legacy system removal
+    Net.player_erase_sprite(player_id, element.obj_id)
+  end
+  
+  -- Remove from cache
+  ui_cache[player_id][sprite_id] = nil
+  
   return true
 end
 
 local function clear_all_ui_for_player(player_id)
-  if not ui_cache[player_id] then return end
-
-  for sprite_id, element in next, ui_cache[player_id] do
-    -- erase draw object
-    Net.player_erase_sprite(player_id, sprite_id .. "_obj")
+  -- Clear using SpriteManager if available
+  if SpriteManager then
+    local manager = get_sprite_manager(player_id)
+    if manager then
+        -- Get all objects and erase them
+        for _, obj in pairs(manager.objects) do
+            manager:erase_sprite(obj.properties.id)
+        end
+    end
   end
-
-  -- hard reset cache
+  
+  -- Clear cache
   ui_cache[player_id] = {}
+  
+  return true
 end
-
 
 -- ============================================================
 -- Text (Displayer-backed, no-op if missing)
 -- ============================================================
-function frame.draw_text(text_id, player_id, text, x, y, z, font, scale)
-  if not DISPLAYER_READY then return false end
-  Displayer.Text.drawText(player_id, text_id, text, tonumber(x) * 2, tonumber(y) * 2, z, font, scale)
+function frame.draw_text(text_id, player_id, text, x, y, z, font, scale, properties)
+  if not DISPLAYER_READY then return false end  
+  properties = properties or {}
+  local _, _, drawX, drawY = _resolve_xy_scaled(tonumber(x), tonumber(y), properties)
+  Displayer.Text.drawText(player_id, text_id, text, drawX, drawY, z, font, scale, properties)
   return true
 end
 
 -- NEW FUNCTION: Get text width before displaying it
--- Returns the pixel width of text with given font and scale, or 0 if Displayer not available
--- Parameters:
---   text: The text string to measure
---   font: Font name (optional, defaults to "THICK")
---   scale: Scale factor (optional, defaults to 2.0)
 function frame.get_text_width(text, font, scale)
   if not DISPLAYER_READY then 
     print("[net-games][framework] get_text_width(): Displayer not available")
     return 0 
   end
   
-  -- Check if Displayer.Font.getTextWidth exists
   if Displayer.Font and Displayer.Font.getTextWidth then
-    -- Call the underlying font system to get text width
     local width = Displayer.Font.getTextWidth(text, font or "THICK", scale or 2.0)
     return width or 0
   else
-    -- Fallback: try to access directly if the API structure is different
     local success, width = pcall(function()
       return Displayer.Font.getTextWidth(text, font or "THICK", scale or 2.0)
     end)
@@ -605,10 +954,9 @@ function frame.get_text_width(text, font, scale)
   end
 end
 
-
-function frame.update_text(text_id, player_id, text)
+function frame.update_text(text_id, player_id, text, properties)
   if not DISPLAYER_READY then return false end
-  Displayer.Text.updateText(player_id, text_id, tostring(text))
+  Displayer.Text.updateText(player_id, text_id, tostring(text), properties)
   return true
 end
 
@@ -639,11 +987,15 @@ end
 -- ============================================================
 -- Timers / Countdowns (Displayer-backed, emits countdown_ended)
 -- ============================================================
-function frame.spawn_timer(timer_id, player_id, X, Y, duration, loop)
+function frame.spawn_timer(timer_id, player_id, X, Y, duration, loop, properties)
   if not DISPLAYER_READY then return false end
   loop = loop or false
   Displayer.Timer.createPlayerTimer(player_id, timer_id, duration, function(_, _, _) end, loop)
-  Displayer.TimerDisplay.createPlayerTimerDisplay(player_id, timer_id, X * 2, Y * 2, "default")
+  do
+    properties = properties or {}
+    local _, _, drawX, drawY = _resolve_xy_scaled(X, Y, properties)
+    Displayer.TimerDisplay.createPlayerTimerDisplay(player_id, timer_id, drawX, drawY, "default", properties)
+  end
   return true
 end
 
@@ -671,7 +1023,7 @@ function frame.update_timer(timer_id, player_id, duration)
   return true
 end
 
-function frame.spawn_countdown(countdown_id, player_id, X, Y, duration, loop)
+function frame.spawn_countdown(countdown_id, player_id, X, Y, duration, loop, properties)
   if not DISPLAYER_READY then return false end
   loop = loop or false
   Displayer.Timer.createPlayerCountdown(player_id, countdown_id, duration, function(_, id, value)
@@ -679,7 +1031,11 @@ function frame.spawn_countdown(countdown_id, player_id, X, Y, duration, loop)
       Net:emit("countdown_ended", { player_id = player_id, countdown_id = id })
     end
   end, loop)
-  Displayer.TimerDisplay.createPlayerCountdownDisplay(player_id, countdown_id, X * 2, Y * 2, "default")
+  do
+    properties = properties or {}
+    local _, _, drawX, drawY = _resolve_xy_scaled(X, Y, properties)
+    Displayer.TimerDisplay.createPlayerCountdownDisplay(player_id, countdown_id, drawX, drawY, "default", properties)
+  end
   return true
 end
 
@@ -708,7 +1064,7 @@ function frame.update_countdown(countdown_id, player_id, duration)
 end
 
 -- ============================================================
--- Cursor system (virtual_input-driven)
+-- Cursor system (virtual_input-driven) - Updated for SpriteManager
 -- ============================================================
 function frame.spawn_cursor(cursor_id, player_id, options)
   return async(function()
@@ -744,35 +1100,94 @@ function frame.spawn_cursor(cursor_id, player_id, options)
     if anim ~= "" then pcall(function() Net.provide_asset_for_player(player_id, anim) end) end
     if tex then pcall(function() Net.provide_asset_for_player(player_id, tex) end) end
 
-    Net.player_alloc_sprite(player_id, cursor_id, {
-      texture_path = tex,
-      anim_path = anim,
-      anim_state = state
-    })
+    -- Use SpriteManager if available
+    if SpriteManager then
+        local manager = get_sprite_manager(player_id)
+        if manager then
+            manager:strict_alloc_sprite(cursor_id, {
+                texture_path = tex,
+                anim_path = anim,
+                anim_state = state
+            })
+            
+            local merged_props = _merge_tables(options.properties, selection.properties)
+            local rawX, rawY, drawX, drawY = _resolve_xy_scaled(selection.x, selection.y, merged_props)
+            
+            local draw_params = {
+                x = drawX,
+                y = drawY,
+                sx = 2,
+                sy = 2
+            }
+            
+            if selection.z then draw_params.z = selection.z end
+            if state and state ~= "" then draw_params.anim_state = state end
 
-    local draw_params = {
-      id = cursor_id .. "_obj",
-      x = selection.x * 2,
-      y = selection.y * 2,
-      sx = 2,
-      sy = 2
-    }
-    
-    if selection.z then draw_params.z = selection.z end
-    if state and state ~= "" then draw_params.anim_state = state end
+            if prepare_draw_params then
+                draw_params = prepare_draw_params(draw_params, _with_scaled_xy(merged_props, drawX, drawY))
+            end
 
-    Net.player_draw_sprite(player_id, cursor_id, draw_params)
+            -- Draw cursor with obj_id
+            local obj_id = cursor_id .. "_obj"
+            manager:draw_sprite(cursor_id, obj_id, draw_params)
+            
+            -- Store sprite manager info
+            cursor_cache[player_id].sprite_manager = {
+                alloc_id = cursor_id,
+                obj_id = obj_id,
+                manager = manager
+            }
+        end
+    else
+        -- Legacy allocation
+        Net.player_alloc_sprite(player_id, cursor_id, {
+            texture_path = tex,
+            anim_path = anim,
+            anim_state = state
+        })
+
+        local merged_props = _merge_tables(options.properties, selection.properties)
+        local rawX, rawY, drawX, drawY = _resolve_xy_scaled(selection.x, selection.y, merged_props)
+
+        local draw_params = {
+            id = cursor_id .. "_obj",
+            x = drawX,
+            y = drawY,
+            sx = 2,
+            sy = 2
+        }
+        
+        if selection.z then draw_params.z = selection.z end
+        if state and state ~= "" then draw_params.anim_state = state end
+
+        if prepare_draw_params then
+            draw_params = prepare_draw_params(draw_params, _with_scaled_xy(merged_props, drawX, drawY))
+        end
+
+        Net.player_draw_sprite(player_id, cursor_id, draw_params)
+    end
 
     cursor_cache[player_id].sprites = cursor_cache[player_id].sprites or {}
     cursor_cache[player_id].current = 1
     cursor_cache[player_id].locked = false
+    cursor_cache[player_id].uses_sprite_manager = SpriteManager ~= nil
+    
     return true
   end)
 end
 
 function frame.remove_cursor(cursor_id, player_id)
+  -- Erase using appropriate method
+  if cursor_cache[player_id] and cursor_cache[player_id].uses_sprite_manager and SpriteManager then
+    local manager = get_sprite_manager(player_id)
+    if manager then
+        manager:erase_sprite(cursor_id .. "_obj")
+    end
+  else
+    Net.player_erase_sprite(player_id, cursor_id .. "_obj")
+  end
+  
   cursor_cache[player_id] = nil
-  Net.player_erase_sprite(player_id, cursor_id .. "_obj")
   if Net.unlock_player_input then
     Net.unlock_player_input(player_id)
   end
@@ -796,11 +1211,27 @@ Net:on("cursor_move", function(event)
   local sel = selections[cc.current]
   if not sel then return end
 
-  Net.player_draw_sprite(event.player_id, event.cursor, {
-    id = event.cursor .. "_obj",
-    x = sel.x * 2,
-    y = sel.y * 2
-  })
+  -- Update cursor position using appropriate method
+  if cc.uses_sprite_manager and SpriteManager then
+    local manager = get_sprite_manager(event.player_id)
+    if manager then
+        local merged_props = _merge_tables(cc.properties, sel.properties)
+        local _, _, drawX, drawY = _resolve_xy_scaled(sel.x, sel.y, merged_props)
+        local draw = { x = drawX, y = drawY }
+        if prepare_draw_params then
+            draw = prepare_draw_params(draw, _with_scaled_xy(merged_props, drawX, drawY))
+        end
+        manager:set_properties(event.cursor .. "_obj", draw, true)
+    end
+  else
+    local merged_props = _merge_tables(cc.properties, sel.properties)
+    local _, _, drawX, drawY = _resolve_xy_scaled(sel.x, sel.y, merged_props)
+    local draw = { id = event.cursor .. "_obj", x = drawX, y = drawY }
+    if prepare_draw_params then
+        draw = prepare_draw_params(draw, _with_scaled_xy(merged_props, drawX, drawY))
+    end
+    Net.player_draw_sprite(event.player_id, event.cursor, draw)
+  end
 
   Net:emit("cursor_hover", {
     player_id = event.player_id,
@@ -873,7 +1304,7 @@ function frame.deactivate_framework(player_id, ...)
   -- 2) remove cursors (tourney assumes this)
   if cursor_cache[player_id] then
     for cursor_id, _ in next, cursor_cache[player_id] do
-      Net.player_erase_sprite(player_id, cursor_id .. "_obj")
+      frame.remove_cursor(cursor_id, player_id)
     end
     cursor_cache[player_id] = nil
   end
@@ -894,10 +1325,15 @@ Net:on("player_join", function(event)
     table.insert(online_players, event.player_id)
   end
 
+  -- Initialize SpriteManager for player if available
+  if SpriteManager then
+    SpriteManager.init_player(event.player_id)
+  end
+
   -- caches
-  ui_cache[event.player_id] = ui_cache[event.player_id] or {}
   cursor_cache[event.player_id] = cursor_cache[event.player_id] or {}
   avatar_cache[event.player_id] = avatar_cache[event.player_id] or {}
+  ui_cache[event.player_id] = ui_cache[event.player_id] or {}
 
   provide_framework_assets(event.player_id)
 
@@ -914,6 +1350,11 @@ Net:on("player_join", function(event)
 end)
 
 Net:on("player_disconnect", function(event)
+  -- Clean up SpriteManager
+  if SpriteManager then
+    SpriteManager.cleanup_player(event.player_id)
+  end
+
   cursor_cache[event.player_id] = nil
   avatar_cache[event.player_id] = nil
   ui_cache[event.player_id] = nil
