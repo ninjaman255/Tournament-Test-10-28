@@ -2,7 +2,7 @@
 --
 -- Net Games Input Helper (sticky-state)
 -- - Listens to Net:on("virtual_input") once
--- - Tracks per-player edge presses (confirm/cancel/dpad)
+-- - Tracks per-player edge presses (confirm/cancel/dpad/minimap/shoulders/option)
 -- - IMPORTANT: missing keys in event.events do NOT imply released
 --
 -- Input states (per docs):
@@ -17,7 +17,7 @@
 --   B) map:   { ["Confirm"]=0, ["UI Left"]=1 }
 --
 -- Key behavior:
--- - confirm/cancel: POP once per down. (Never repeat on hold. Scroll ignored.)
+-- - confirm/cancel/minimap/l_shoulder/r_shoulder/option: POP once per down. (Never repeat on hold. Scroll ignored.)
 -- - directions: POP on down + repeat on Scroll pulses while held.
 --
 -- Also supports:
@@ -32,7 +32,7 @@ local st = {}
 --=====================================================
 -- Debug toggles
 --=====================================================
-Input.DEBUG = false                -- master debug
+Input.DEBUG = true                -- master debug
 Input.DEBUG_THROTTLE = 0          -- seconds; 0 = no throttle
 Input.DEBUG_CONFIRM_ONLY = false  -- if true, prints only when confirm group appears in packet
 Input.DEBUG_DUMP_PACKET = false    -- if true, prints interpreted map each packet (noisy)
@@ -46,8 +46,8 @@ local NON_DIR_UP_TIMEOUT = 0.06
 local function refresh_non_dir_timeout(s)
   local t = now()
 
-  -- Only for confirm/cancel (non-dir)
-  for _, k in ipairs({ "confirm", "cancel" }) do
+  -- For confirm/cancel/minimap/shoulders/option (non-dir, non-repeat)
+  for _, k in ipairs({ "Confirm", "Cancel", "Minimap", "Shoulder L", "Shoulder_R", "Option" }) do
     if s.down[k] and t >= (s.non_dir_down_until[k] or 0) then
       s.down[k] = false
       s.non_dir_armed[k] = true
@@ -64,11 +64,18 @@ local function ensure(player_id)
       require_release = {},
 
       -- non-dir latch: we synthesize an "up" if we stop seeing the key for a bit
-      non_dir_down_until = { confirm = 0, cancel = 0 },
-      non_dir_armed      = { confirm = true, cancel = true },
+      non_dir_down_until = { 
+        confirm = 0, cancel = 0, 
+        minimap = 0, l_shoulder = 0, r_shoulder = 0, option = 0 
+      },
+      non_dir_armed      = { 
+        confirm = true, cancel = true, 
+        minimap = true, l_shoulder = true, r_shoulder = true, option = true 
+      },
 
       down = {
         confirm=false, cancel=false,
+        minimap=false, l_shoulder=false, r_shoulder=false, option=false,
         left=false, right=false,
         up=false, down=false,
       },
@@ -119,6 +126,10 @@ end
 local DEFAULT_BINDINGS = {
   confirm = { "Confirm", "A", "OK", "Accept" },
   cancel  = { "Cancel", "Back", "B" },
+  minimap = { "Minimap" },
+  l_shoulder = {"Shoulder L"},
+  r_shoulder = {"Shoulder R"},
+  option = { "Option" },
 
   left    = { "UI Left", "Move Left", "Left" },
   right   = { "UI Right", "Move Right", "Right" },
@@ -295,12 +306,20 @@ function Input.debug_dump_last_packet(player_id)
   local function b(x) return x and "true" or "false" end
   print("[InputDBG] down: confirm=" .. b(s.down.confirm) ..
     " cancel=" .. b(s.down.cancel) ..
+    " minimap=" .. b(s.down.minimap) ..
+    " l_shoulder=" .. b(s.down.l_shoulder) ..
+    " r_shoulder=" .. b(s.down.r_shoulder) ..
+    " option=" .. b(s.down.option) ..
     " left=" .. b(s.down.left) ..
     " right=" .. b(s.down.right) ..
     " up=" .. b(s.down.up) ..
     " down=" .. b(s.down.down))
   print("[InputDBG] edge: confirm=" .. b(s.edge.confirm) ..
     " cancel=" .. b(s.edge.cancel) ..
+    " minimap=" .. b(s.edge.minimap) ..
+    " l_shoulder=" .. b(s.edge.l_shoulder) ..
+    " r_shoulder=" .. b(s.edge.r_shoulder) ..
+    " option=" .. b(s.edge.option) ..
     " left=" .. b(s.edge.left) ..
     " right=" .. b(s.edge.right) ..
     " up=" .. b(s.edge.up) ..
@@ -308,16 +327,12 @@ function Input.debug_dump_last_packet(player_id)
 end
 
 function Input.attach_virtual_input_listener(bindings)
-    if LISTENER_ATTACHED then
-      if Input.DEBUG then
-        print("[Input] listener already attached")
-      end
-      return
-    end
-    LISTENER_ATTACHED = true
-    if Input.DEBUG then
-      print("[Input] attaching Net:on('virtual_input') listener")
-    end
+  if LISTENER_ATTACHED then
+    print("[Input] listener already attached")
+    return
+  end
+  LISTENER_ATTACHED = true
+  print("[Input] attaching Net:on('virtual_input') listener")
 
   bindings = bindings or DEFAULT_BINDINGS
 
@@ -346,14 +361,14 @@ function Input.attach_virtual_input_listener(bindings)
     end
 
     -- Apply group logic
-    local keys = { "confirm","cancel","left","right","up","down" }
+    local keys = { "confirm","cancel","minimap","l_shoulder","r_shoulder","option","left","right","up","down" }
     for _, k in ipairs(keys) do
       local down_change, saw_pressed, saw_held, saw_scroll =
         resolve_group(map, bindings[k], is_dir_key(k))
 
       --=====================================================
       -- NON-DIRECTION KEYS: POP once per down.
-      -- IMPORTANT: IGNORE Scroll completely for confirm/cancel.
+      -- IMPORTANT: IGNORE Scroll completely for confirm/cancel/minimap/shoulders/option.
       -- Some clients never emit Pressed; they jump straight to Held.
       -- So: allow Held to create an edge ONLY if we were previously up.
       --=====================================================
@@ -429,6 +444,10 @@ function Input.attach_virtual_input_listener(bindings)
 
         print("[InputDBG] edges: confirm=" .. b(s.edge.confirm) ..
           " cancel=" .. b(s.edge.cancel) ..
+          " minimap=" .. b(s.edge.minimap) ..
+          " l_shoulder=" .. b(s.edge.l_shoulder) ..
+          " r_shoulder=" .. b(s.edge.r_shoulder) ..
+          " option=" .. b(s.edge.option) ..
           " left=" .. b(s.edge.left) ..
           " right=" .. b(s.edge.right) ..
           " up=" .. b(s.edge.up) ..

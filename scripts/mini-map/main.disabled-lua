@@ -1,0 +1,700 @@
+-- scripts/net-games/input/minimap.lua
+--
+-- Minimap Controller Module
+-- Handles minimap open/close states with cooldown and camera movement
+-- Uses the framework's input system and follows its event patterns
+local Input = require("scripts/net-games/input/input")
+local helpers = require("scripts/net-games/helpers/net-helpers")
+
+local Minimap = {}
+
+-- Configuration
+local MINIMAP_COOLDOWN = 0.3  -- seconds between minimap open/close
+
+-- Per-player minimap state
+local minimap_states = {}
+-- Table to store sprite information per player (structure will be implemented later)
+local player_sprites = {}
+
+-- Camera movement speed for minimap panning
+local CAMERA_PAN_SPEED = 10.0  -- units per second
+
+-- Initialize helpers
+helpers.patch_net()
+
+-- Track whether tick listener is attached
+Minimap._tick_attached = false
+
+-- Custom minimap events (following framework pattern)
+local minimap_events = {
+    "minimap_opened",
+    "minimap_closed", 
+    "minimap_camera_moved",
+    "minimap_state_changed"
+}
+
+-- Register all minimap events with Net
+for _, event_name in ipairs(minimap_events) do
+    if Net[event_name] == nil then
+        Net[event_name] = function(callback)
+            Net:on(event_name, callback)
+        end
+    end
+end
+
+
+-- Helper to get online players (following framework pattern)
+ function get_online_players()
+    local players = {}
+    for player_id, _ in pairs(minimap_states) do
+        table.insert(players, player_id)
+    end
+    return players
+end
+
+
+-- Attach tick listener for minimap updates
+local function attach_tick()
+    if Minimap._tick_attached then return end
+    Minimap._tick_attached = true
+    
+    print("[minimap] Attaching tick listener for minimap updates")
+    
+    Net:on("tick", function(event)
+        local delta_time = event.delta_time
+        
+        -- DEBUG: Print tick info if debug is enabled
+        if Input.DEBUG then
+            print("[minimap-tick] Tick delta: " .. tostring(delta_time) .. 
+                  ", Online players: " .. tostring(#get_online_players()))
+        end
+        
+        -- Process minimap state for all online players
+        for _, player_id in ipairs(get_online_players()) do
+            local state = minimap_states[player_id]
+            if not state then
+                -- Initialize state for this player if not exists
+                state = {
+                    is_open = false,
+                    open_time = 0,
+                    camera_locked = false,
+                    input_locked = false,
+                    last_camera_pos = {x = 240, y = 160, z = 0},
+                    target_actor = nil,
+                    closing = false,
+                    last_state = nil,
+                    last_input_time = 0
+                }
+                minimap_states[player_id] = state
+            end
+            
+            -- Check for minimap button input (following framework's input handling pattern)
+            -- Using lowercase "minimap" as per input.lua DEFAULT_BINDINGS
+            if Input.pop(player_id, "Minimap") then
+                if Input.DEBUG then
+                    print("[minimap-input] Player " .. player_id .. " pressed minimap button")
+                    Input.debug_dump_last_packet(player_id)
+                end
+                
+                -- Get player's current position and actor for camera
+                local player_pos = state.last_camera_pos
+                local target_actor = state.target_actor
+                
+                -- Check cooldown before processing
+                if not state.closing and Minimap.can_open(player_id) then
+                    -- Handle the minimap toggle
+                    local success, result = Minimap.handle_button_press(
+                        player_id, 
+                        player_pos.x, 
+                        player_pos.y, 
+                        player_pos.z, 
+                        target_actor
+                    )
+                    
+                    if Input.DEBUG then
+                        print("[minimap] Player " .. player_id .. " minimap button result: " .. 
+                              tostring(success) .. " (" .. tostring(result) .. ")")
+                    end
+                    
+                    -- Store last input time (similar to framework's tracking_state)
+                    state.last_input_time = os.clock()
+                else
+                    if Input.DEBUG then
+                        local cooldown_msg = state.closing and "closing" or "cooldown"
+                        print("[minimap] Player " .. player_id .. " minimap input ignored: " .. cooldown_msg)
+                    end
+                end
+            end
+            
+            -- Update minimap if open (following framework's update pattern)
+            if state.is_open and not state.closing then
+                -- Check for directional input (like framework's cursor movement)
+                local moved = false
+                local dx, dy, dz = 0, 0, 0
+                local move_speed = CAMERA_PAN_SPEED * delta_time
+                
+                -- Check each directional button individually (like framework does)
+                if Input.is_down(player_id, "left") then
+                    dx = dx - move_speed
+                    moved = true
+                end
+                if Input.is_down(player_id, "right") then
+                    dx = dx + move_speed
+                    moved = true
+                end
+                if Input.is_down(player_id, "up") then
+                    dz = dz + move_speed
+                    moved = true
+                end
+                if Input.is_down(player_id, "down") then
+                    dz = dz - move_speed
+                    moved = true
+                end
+                
+                -- Move camera if any directional input
+                if moved and Net and Net.move_player_camera then
+                    state.last_camera_pos.x = state.last_camera_pos.x + dx
+                    state.last_camera_pos.y = state.last_camera_pos.y + dy
+                    state.last_camera_pos.z = state.last_camera_pos.z + dz
+                    
+                    -- Move camera smoothly
+                    Net.move_player_camera(player_id, 
+                        state.last_camera_pos.x, 
+                        state.last_camera_pos.y, 
+                        state.last_camera_pos.z, 
+                        0.1)
+                    
+                    -- Emit camera moved event (like framework's cursor_move event)
+                    Net:emit("minimap_camera_moved", {
+                        player_id = player_id,
+                        camera_position = state.last_camera_pos,
+                        delta_x = dx,
+                        delta_y = dy,
+                        delta_z = dz
+                    })
+                    
+                    if Input.DEBUG then
+                        print("[minimap-debug] Camera moved to: " .. state.last_camera_pos.x .. 
+                              ", " .. state.last_camera_pos.y .. ", " .. state.last_camera_pos.z)
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- Helper to get online players (following framework pattern)
+local function get_online_players()
+    local players = {}
+    for player_id, _ in pairs(minimap_states) do
+        table.insert(players, player_id)
+    end
+    return players
+end
+
+-- Ensure input listener is attached (called once, similar to framework)
+local function ensure_input_listener()
+    -- Attach the virtual input listener if not already attached
+    Input.attach_virtual_input_listener()
+    
+    -- Attach our tick listener
+    attach_tick()
+    
+    print("[minimap] Input listener and tick handler attached")
+end
+
+-- Player join/leave handlers (following framework's pattern)
+Net:on("player_join", function(event)
+    local player_id = event.player_id
+    
+    -- Initialize minimap state for new player (like framework's caches)
+    minimap_states[player_id] = {
+        is_open = false,
+        open_time = 0,
+        camera_locked = false,
+        input_locked = false,
+        last_camera_pos = {x = 240, y = 160, z = 0},
+        target_actor = nil,
+        closing = false,
+        last_state = nil,
+        last_input_time = 0,
+        sprite_data = {}  -- For sprite storage (like framework's ui_cache)
+    }
+    
+    -- Initialize sprite storage for player (like framework's player_sprites)
+    player_sprites[player_id] = {}
+    
+    -- Ensure listeners are attached (first player triggers this, like framework)
+    ensure_input_listener()
+    
+    print("[minimap] Player " .. player_id .. " joined, state initialized")
+    
+    -- Debug: Show input state for this player (like framework debug)
+    if Input.DEBUG then
+        print("[minimap-debug] Player " .. player_id .. " state created")
+        -- Note: Input.debug_dump_last_packet requires at least one input packet
+    end
+end)
+
+Net:on("player_disconnect", function(event)
+    local player_id = event.player_id
+    
+    -- Debug before cleanup (like framework)
+    if Input.DEBUG then
+        print("[minimap-debug] Cleaning up player " .. player_id)
+        print("[minimap-debug] Player state before cleanup:")
+        local state = minimap_states[player_id]
+        if state then
+            print("  is_open: " .. tostring(state.is_open))
+            print("  closing: " .. tostring(state.closing))
+            print("  camera_locked: " .. tostring(state.camera_locked))
+        end
+    end
+    
+    -- Clean up player state and sprites (like framework's cleanup)
+    Minimap.cleanup(player_id)
+    player_sprites[player_id] = nil
+    
+    print("[minimap] Player " .. player_id .. " disconnected, state cleaned up")
+    
+    -- Emit state changed event (like framework's events)
+    Net:emit("minimap_state_changed", {
+        player_id = player_id,
+        action = "player_left",
+        state = nil
+    })
+end)
+
+-- Player movement handler (like framework's player_move handler)
+Net:on("player_move", function(event)
+    local player_id = event.player_id
+    local state = minimap_states[player_id]
+    
+    if state and state.is_open and not state.closing then
+        -- Update minimap position based on player movement
+        -- This could be used to center minimap on player, etc.
+        if Input.DEBUG then
+            print("[minimap-debug] Player " .. player_id .. " moved while minimap open")
+        end
+    end
+end)
+
+--=====================================================
+-- Internal State Management
+--=====================================================
+
+local function ensure_state(player_id)
+    if not minimap_states[player_id] then
+        minimap_states[player_id] = {
+            is_open = false,
+            open_time = 0,
+            camera_locked = false,
+            input_locked = false,
+            last_camera_pos = {x = 0, y = 0, z = 0},
+            target_actor = nil,
+            closing = false,
+            last_state = nil,
+            last_input_time = 0,
+            sprite_data = {}
+        }
+    end
+    return minimap_states[player_id]
+end
+
+--=====================================================
+-- Public API
+--=====================================================
+
+-- Open the minimap for a player
+function Minimap.open(player_id, x, y, z, hold_time)
+    local state = ensure_state(player_id)
+    
+    if state.is_open or state.closing then
+        if Input.DEBUG then
+            print("[minimap-debug] Cannot open - already open or closing")
+        end
+        return false  -- Already open or closing
+    end
+    
+    -- Debug
+    if Input.DEBUG then
+        print("[minimap-debug] Opening minimap for player " .. player_id)
+        print("[minimap-debug] Position: " .. x .. ", " .. y .. ", " .. z)
+    end
+    
+    -- Clear any pending input to prevent carry-over (like framework's input swallowing)
+    Input.consume(player_id)
+    Input.swallow(player_id, 0.08)  -- Short swallow window
+    
+    -- Lock player input and unlock camera
+    if Net and Net.lock_player_input then
+        if Input.DEBUG then
+            print("[minimap-debug] Locking player input")
+        end
+        Net.lock_player_input(player_id)
+    end
+    if Net and Net.unlock_player_camera then
+        if Input.DEBUG then
+            print("[minimap-debug] Unlocking player camera")
+        end
+        Net.unlock_player_camera(player_id)
+    end
+    
+    -- Store current time and state
+    state.is_open = true
+    state.open_time = os.clock()
+    state.camera_locked = true
+    state.input_locked = true
+    state.closing = false
+    state.last_state = "opening"
+    
+    -- Move camera to minimap position
+    if Net and Net.move_player_camera and x and y and z then
+        state.last_camera_pos = {x = x, y = y, z = z}
+        if Input.DEBUG then
+            print("[minimap-debug] Moving camera to minimap position")
+        end
+        Net.move_player_camera(player_id, x, y, z, hold_time or 0.5)
+    end
+    
+    -- Use a timer to prevent immediate re-opening (similar to framework's async operations)
+    local timer = Net:create_timer(0.15, function()
+        state.last_state = "open"
+        if Input.DEBUG then
+            print("[minimap-debug] Minimap fully opened for player " .. player_id)
+        end
+        
+        -- Emit minimap opened event (like framework's custom events)
+        Net:emit("minimap_opened", {
+            player_id = player_id,
+            camera_position = state.last_camera_pos,
+            timestamp = os.clock()
+        })
+        
+        -- Emit state changed event
+        Net:emit("minimap_state_changed", {
+            player_id = player_id,
+            action = "opened",
+            state = state
+        })
+    end)
+    
+    return true
+end
+
+-- Close the minimap for a player
+function Minimap.close(player_id, actor_id)
+    local state = ensure_state(player_id)
+    
+    if not state.is_open then
+        if Input.DEBUG then
+            print("[minimap-debug] Cannot close - not open")
+        end
+        return false  -- Not open
+    end
+    
+    -- Debug
+    if Input.DEBUG then
+        print("[minimap-debug] Closing minimap for player " .. player_id)
+    end
+    
+    -- Mark as closing to eat input during animation (like framework's state management)
+    state.closing = true
+    state.is_open = false
+    state.last_state = "closing"
+    
+    -- Clear any pending input during closing (like framework's input swallowing)
+    Input.consume(player_id)
+    Input.swallow(player_id, 0.05)
+    
+    -- Emit closing event
+    Net:emit("minimap_state_changed", {
+        player_id = player_id,
+        action = "closing",
+        state = state
+    })
+    
+    -- Return camera to player tracking
+    if Net and Net.track_with_player_camera then
+        if Input.DEBUG then
+            print("[minimap-debug] Returning camera to player tracking")
+        end
+        Net.track_with_player_camera(player_id, actor_id)
+    end
+    
+    -- Unlock player input after a short delay (to match camera transition)
+    local timer = Net:create_timer(0.3, function()
+        if Net and Net.unlock_player_input then
+            if Input.DEBUG then
+                print("[minimap-debug] Unlocking player input")
+            end
+            Net.unlock_player_input(player_id)
+        end
+        
+        -- Reset state after animation completes
+        state.camera_locked = false
+        state.input_locked = false
+        state.target_actor = actor_id
+        state.open_time = os.clock()
+        state.closing = false
+        state.last_state = "closed"
+        
+        if Input.DEBUG then
+            print("[minimap-debug] Minimap fully closed for player " .. player_id)
+        end
+        
+        -- Emit minimap closed event (like framework's custom events)
+        Net:emit("minimap_closed", {
+            player_id = player_id,
+            target_actor = actor_id,
+            timestamp = os.clock()
+        })
+        
+        -- Emit state changed event
+        Net:emit("minimap_state_changed", {
+            player_id = player_id,
+            action = "closed",
+            state = state
+        })
+    end)
+    
+    return true
+end
+
+-- Toggle minimap state
+function Minimap.toggle(player_id, x, y, z, actor_id)
+    local state = ensure_state(player_id)
+    
+    if state.is_open then
+        if Input.DEBUG then
+            print("[minimap-debug] Toggling - currently open, closing")
+        end
+        return Minimap.close(player_id, actor_id)
+    else
+        if Input.DEBUG then
+            print("[minimap-debug] Toggling - currently closed, opening")
+        end
+        return Minimap.open(player_id, x, y, z)
+    end
+end
+
+-- Check if minimap is open for a player
+function Minimap.is_open(player_id)
+    local state = ensure_state(player_id)
+    return state.is_open and not state.closing
+end
+
+-- Check if minimap can be opened (cooldown check)
+function Minimap.can_open(player_id)
+    local state = ensure_state(player_id)
+    local current_time = os.clock()
+    
+    -- Check if closing or already open
+    if state.closing or state.is_open then
+        if Input.DEBUG then
+            print("[minimap-debug] Cannot open - closing: " .. tostring(state.closing) .. 
+                  ", is_open: " .. tostring(state.is_open))
+        end
+        return false
+    end
+    
+    -- Check if enough time has passed since last close
+    if state.open_time > 0 then
+        local time_since_close = current_time - state.open_time
+        local can_open = time_since_close >= MINIMAP_COOLDOWN
+        
+        if Input.DEBUG then
+            print("[minimap-debug] Cooldown check: time_since_close=" .. time_since_close .. 
+                  ", MINIMAP_COOLDOWN=" .. MINIMAP_COOLDOWN .. 
+                  ", can_open=" .. tostring(can_open))
+        end
+        
+        return can_open
+    end
+    
+    return true
+end
+
+-- Handle minimap button press with cooldown
+function Minimap.handle_button_press(player_id, x, y, z, actor_id)
+    local state = ensure_state(player_id)
+    
+    -- Check if we're in a closing animation
+    if state.closing then
+        print("[minimap-debug] Button press ignored - closing animation in progress")
+        return false, "closing"
+    end
+    
+    -- Check cooldown
+    if not Minimap.can_open(player_id) then
+        print("[minimap-debug] Button press ignored - cooldown active")
+        return false, "cooldown_active"
+    end
+    
+    local success = Minimap.toggle(player_id, x, y, z, actor_id)
+    
+    if success and Minimap.is_open(player_id) then
+        print("[minimap] MINI MAP OPENED for player " .. player_id)
+        return true, "opened"
+    elseif success and not Minimap.is_open(player_id) then
+        print("[minimap] MINI MAP CLOSED for player " .. player_id)
+        return true, "closed"
+    else
+        print("[minimap] MINI MAP TOGGLE FAILED for player " .. player_id)
+        return false, "failed"
+    end
+end
+
+-- Get minimap state information
+function Minimap.get_state(player_id)
+    local state = ensure_state(player_id)
+    local current_time = os.clock()
+    
+    local cooldown_remaining = 0
+    if not state.is_open and not state.closing and state.open_time > 0 then
+        cooldown_remaining = math.max(0, MINIMAP_COOLDOWN - (current_time - state.open_time))
+    end
+    
+    return {
+        is_open = state.is_open,
+        closing = state.closing,
+        open_time = state.open_time,
+        camera_locked = state.camera_locked,
+        input_locked = state.input_locked,
+        cooldown_remaining = cooldown_remaining,
+        camera_position = state.last_camera_pos,
+        target_actor = state.target_actor,
+        last_state = state.last_state,
+        last_input_time = state.last_input_time
+    }
+end
+
+-- Force close minimap (for game state resets, etc.)
+function Minimap.force_close(player_id, actor_id)
+    local state = ensure_state(player_id)
+    
+    if Input.DEBUG then
+        print("[minimap-debug] Force closing minimap for player " .. player_id)
+    end
+    
+    if state.is_open then
+        return Minimap.close(player_id, actor_id)
+    end
+    
+    -- Reset state even if not open
+    state.is_open = false
+    state.camera_locked = false
+    state.input_locked = false
+    state.closing = false
+    state.open_time = os.clock()  -- Set cooldown timer
+    state.last_state = "force_closed"
+    
+    -- Emit state changed event
+    Net:emit("minimap_state_changed", {
+        player_id = player_id,
+        action = "force_closed",
+        state = state
+    })
+    
+    return true
+end
+
+-- Set camera pan speed
+function Minimap.set_camera_speed(speed)
+    if speed and speed > 0 then
+        CAMERA_PAN_SPEED = speed
+        print("[minimap] Camera pan speed set to: " .. speed)
+    end
+end
+
+-- Get camera pan speed
+function Minimap.get_camera_speed()
+    return CAMERA_PAN_SPEED
+end
+
+-- Set minimap cooldown
+function Minimap.set_cooldown(cooldown)
+    if cooldown and cooldown >= 0 then
+        MINIMAP_COOLDOWN = cooldown
+        print("[minimap] Minimap cooldown set to: " .. cooldown)
+    end
+end
+
+-- Get minimap cooldown
+function Minimap.get_cooldown()
+    return MINIMAP_COOLDOWN
+end
+
+-- Clean up player state (call when player leaves)
+function Minimap.cleanup(player_id)
+    if minimap_states[player_id] then
+        -- Ensure minimap is closed
+        if minimap_states[player_id].is_open then
+            if Input.DEBUG then
+                print("[minimap-debug] Player leaving, closing open minimap")
+            end
+            Minimap.force_close(player_id, nil)
+        end
+        minimap_states[player_id] = nil
+    end
+end
+
+-- Batch update for all players with open minimaps
+function Minimap.update_all(dt)
+    for player_id, state in pairs(minimap_states) do
+        if state.is_open and not state.closing then
+            -- Note: This is now handled in the tick listener
+            -- We keep this function for backward compatibility
+        end
+    end
+end
+
+-- Get sprite storage table for a player
+function Minimap.get_player_sprites(player_id)
+    return player_sprites[player_id] or {}
+end
+
+-- Set sprite storage for a player
+function Minimap.set_player_sprites(player_id, sprites)
+    player_sprites[player_id] = sprites or {}
+end
+
+-- Clear all sprite storage (for debugging/reset)
+function Minimap.clear_all_sprites()
+    player_sprites = {}
+end
+
+-- Add sprite to player's minimap (for framework integration)
+function Minimap.add_sprite(player_id, sprite_id, texture_path, animation_path, properties)
+    local state = ensure_state(player_id)
+    if not state.sprite_data then
+        state.sprite_data = {}
+    end
+    
+    state.sprite_data[sprite_id] = {
+        texture_path = texture_path,
+        animation_path = animation_path,
+        properties = properties or {},
+        timestamp = os.clock()
+    }
+    
+    return true
+end
+
+-- Remove sprite from player's minimap
+function Minimap.remove_sprite(player_id, sprite_id)
+    local state = ensure_state(player_id)
+    if state.sprite_data then
+        state.sprite_data[sprite_id] = nil
+        return true
+    end
+    return false
+end
+
+-- Get all sprites for player's minimap
+function Minimap.get_sprites(player_id)
+    local state = ensure_state(player_id)
+    return state.sprite_data or {}
+end
+
+return Minimap

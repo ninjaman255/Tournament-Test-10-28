@@ -13,6 +13,9 @@ NetHelpers.patch_net()
 
 NetHelpers.safe_require("scripts/net-games/dialogue/startup")
 
+Net:on("virtual_input", function(event)
+    print(event)
+end)
 -------------------------------------------
 -- DEMO CODE FOR NPC THAT LITTERALLY JUST TALK (WOW) --
 -------------------------------------------
@@ -229,3 +232,8 @@ Net:on("actor_interaction", function (event)
 
     end 
 end)
+
+Net:on("player_join", function(event)
+    Net.lock_player_input(event.player_id) 
+        
+    end)
